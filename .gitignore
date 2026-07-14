@@ -1,0 +1,5 @@
+node_modules/
+backend/data/*.json
+backend/.env
+frontend/dist/
+*.log

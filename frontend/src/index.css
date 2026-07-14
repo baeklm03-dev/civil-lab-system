@@ -1,0 +1,34 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  * { box-sizing: border-box; }
+  body {
+    font-family: 'Sarabun', sans-serif;
+    background-color: #f5f4f0;
+    color: #1a1a18;
+  }
+}
+
+@layer components {
+  /* Status badges */
+  .badge { @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium; }
+  .badge-รับเรื่อง  { @apply bg-blue-50 text-blue-700; }
+  .badge-รอข้อมูล  { @apply bg-amber-50 text-amber-700; }
+  .badge-ดำเนินการ { @apply bg-red-50 text-red-700; }
+  .badge-เสร็จสิ้น  { @apply bg-green-50 text-green-800; }
+
+  /* Card */
+  .card { @apply bg-white rounded-xl border border-gray-200 p-5; }
+
+  /* Sidebar nav active */
+  .nav-active {
+    @apply bg-orange-50 text-orange-400 border-r-2 border-orange-400 font-medium;
+  }
+}
+
+/* Scrollbar slim */
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #d1d0c8; border-radius: 3px; }
