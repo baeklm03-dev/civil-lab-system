@@ -1,7 +1,7 @@
 const express = require('express');
-const { readSheet, appendSheet, updateSheet, rowsToObjects } = require('../services/sheetsService');
+const { readSheet, appendSheet, updateSheet, rowsToObjects, deleteSheetRow } = require('../services/sheetsService');
 const localPersonnel = require('../services/localPersonnel');
-const { authMiddleware } = require('../middleware/auth');
+const { authMiddleware, requireRole } = require('../middleware/auth');
 
 const router = express.Router();
 const SHEET_RANGE = 'Personnel!A:E';
@@ -30,7 +30,7 @@ router.get('/', authMiddleware, async (req, res) => {
 });
 
 // POST /api/personnel
-router.post('/', authMiddleware, async (req, res) => {
+router.post('/', authMiddleware, requireRole('admin', 'superadmin'), async (req, res) => {
   try {
     const { fullname_en, fullname_th, role } = req.body;
     if (!fullname_th || !role) {
@@ -54,7 +54,7 @@ router.post('/', authMiddleware, async (req, res) => {
 });
 
 // PUT /api/personnel/:id
-router.put('/:id', authMiddleware, async (req, res) => {
+router.put('/:id', authMiddleware, requireRole('admin', 'superadmin'), async (req, res) => {
   try {
     const { fullname_en, fullname_th, role, active } = req.body;
     if (!fullname_th || !role) {
@@ -84,7 +84,7 @@ router.put('/:id', authMiddleware, async (req, res) => {
 });
 
 // PATCH /api/personnel/:id/status  — toggle active/inactive
-router.patch('/:id/status', authMiddleware, async (req, res) => {
+router.patch('/:id/status', authMiddleware, requireRole('admin', 'superadmin'), async (req, res) => {
   try {
     const list = await getAll();
     const person = list.find((p) => p.id === req.params.id);
@@ -105,6 +105,26 @@ router.patch('/:id/status', authMiddleware, async (req, res) => {
     res.json({ success: true, data: { active: newActive } });
   } catch (err) {
     console.error('Toggle personnel status error:', err);
+    res.status(500).json({ success: false, message: 'เกิดข้อผิดพลาด' });
+  }
+});
+
+// DELETE /api/personnel/:id
+router.delete('/:id', authMiddleware, requireRole('admin', 'superadmin'), async (req, res) => {
+  try {
+    if (useSheets()) {
+      const rows = await readSheet(process.env.PERSONNEL_SHEET_ID, SHEET_RANGE);
+      const [, ...dataRows] = rows;
+      const rowIndex = dataRows.findIndex((r) => r[0] === req.params.id);
+      if (rowIndex === -1) return res.status(404).json({ success: false, message: 'ไม่พบบุคลากรนี้' });
+      await deleteSheetRow(process.env.PERSONNEL_SHEET_ID, 'Personnel', rowIndex + 2);
+    } else {
+      const ok = localPersonnel.deleteOne(req.params.id);
+      if (!ok) return res.status(404).json({ success: false, message: 'ไม่พบบุคลากรนี้' });
+    }
+    res.json({ success: true, message: 'ลบบุคลากรสำเร็จ' });
+  } catch (err) {
+    console.error('Delete personnel error:', err);
     res.status(500).json({ success: false, message: 'เกิดข้อผิดพลาด' });
   }
 });

@@ -2,11 +2,16 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 
+const { authMiddleware } = require('./middleware/auth');
 const authRoutes = require('./routes/auth');
 const workorderRoutes = require('./routes/workorders');
 const personnelRoutes = require('./routes/personnel');
 const reportRoutes = require('./routes/reports');
 const exportRoutes = require('./routes/export');
+const resultsRoutes = require('./routes/results');
+const adminUsersRoutes = require('./routes/adminUsers');
+const adminLogsRoutes = require('./routes/adminLogs');
+const announcementsRoutes = require('./routes/announcements');
 const { router: googleAuthRoutes } = require('./routes/googleAuth');
 
 const app = express();
@@ -34,11 +39,27 @@ app.use('/api/workorders', workorderRoutes);
 app.use('/api/personnel', personnelRoutes);
 app.use('/api/reports', reportRoutes);
 app.use('/api/export', exportRoutes);
+app.use('/api/results', resultsRoutes);
+app.use('/api/admin/users', adminUsersRoutes);
+app.use('/api/admin/logs', adminLogsRoutes);
+app.use('/api/announcements', announcementsRoutes);
 app.use('/api/google-auth', googleAuthRoutes);
 
 // Health check
 app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
+});
+
+// Alias for the literal path named in the dashboard spec — same data as /api/workorders/stats
+app.get('/api/dashboard/summary', authMiddleware, async (req, res) => {
+  try {
+    const { startDate, endDate } = req.query;
+    const data = await workorderRoutes.getDashboardSummary(startDate, endDate);
+    res.json({ success: true, data });
+  } catch (err) {
+    console.error('Dashboard summary error:', err);
+    res.status(500).json({ success: false, message: 'เกิดข้อผิดพลาดในการดึงสถิติ' });
+  }
 });
 
 // 404

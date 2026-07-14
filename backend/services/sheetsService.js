@@ -1,5 +1,6 @@
 const { google } = require('googleapis');
 const tokenStore = require('./tokenStore');
+const localAnnouncements = require('./localAnnouncements');
 const { getOAuth2Client, REDIRECT_URI } = require('../routes/googleAuth');
 
 let sheetsClient = null;
@@ -181,21 +182,83 @@ const PRICE_DATA = [
   ['N/A',     0, '', ''],
 ];
 
-async function ensurePriceListSheet(sheets, spreadsheetId) {
+// สร้าง sheet tab ใหม่ถ้ายังไม่มี พร้อมกรอกแถวเริ่มต้น (header หรือ header+data)
+async function ensureSheetTab(sheets, spreadsheetId, title, initialRows) {
   const meta = await sheets.spreadsheets.get({ spreadsheetId, fields: 'sheets.properties' });
-  const exists = meta.data.sheets.some((s) => s.properties.title === PRICE_SHEET_NAME);
+  const exists = meta.data.sheets.some((s) => s.properties.title === title);
   if (exists) return;
 
   await sheets.spreadsheets.batchUpdate({
     spreadsheetId,
-    requestBody: { requests: [{ addSheet: { properties: { title: PRICE_SHEET_NAME } } }] },
+    requestBody: { requests: [{ addSheet: { properties: { title } } }] },
   });
-  await sheets.spreadsheets.values.update({
+
+  if (initialRows && initialRows.length) {
+    const maxCols = Math.max(...initialRows.map((r) => r.length));
+    const lastCol = String.fromCharCode(65 + maxCols - 1);
+    await sheets.spreadsheets.values.update({
+      spreadsheetId,
+      range: `'${title}'!A1:${lastCol}${initialRows.length}`,
+      valueInputOption: 'USER_ENTERED',
+      requestBody: { values: initialRows },
+    });
+  }
+}
+
+async function ensurePriceListSheet(sheets, spreadsheetId) {
+  return ensureSheetTab(sheets, spreadsheetId, PRICE_SHEET_NAME, PRICE_DATA);
+}
+
+// ลบแถวหนึ่งแถวออกจาก sheet tab (sheetRowNumber = เลขแถวจริงในชีท เริ่มที่ 1)
+async function deleteSheetRow(spreadsheetId, sheetTitle, sheetRowNumber) {
+  const sheets = await getSheets();
+  const meta = await sheets.spreadsheets.get({ spreadsheetId, fields: 'sheets.properties' });
+  const sheetMeta = meta.data.sheets.find((s) => s.properties.title === sheetTitle);
+  if (!sheetMeta) throw new Error(`ไม่พบ sheet tab "${sheetTitle}"`);
+
+  await sheets.spreadsheets.batchUpdate({
     spreadsheetId,
-    range: `'${PRICE_SHEET_NAME}'!A1:D${PRICE_DATA.length}`,
-    valueInputOption: 'USER_ENTERED',
-    requestBody: { values: PRICE_DATA },
+    requestBody: {
+      requests: [{
+        deleteDimension: {
+          range: {
+            sheetId: sheetMeta.properties.sheetId,
+            dimension: 'ROWS',
+            startIndex: sheetRowNumber - 1,
+            endIndex: sheetRowNumber,
+          },
+        },
+      }],
+    },
   });
+}
+
+// คำนวณราคารวมจาก test_items (bar_size + quantity) โดยใช้ตารางราคาเดียวกับที่ใช้ใน VLOOKUP ของ buildWorkOrderSheet
+function calcTotalPrice(test_items) {
+  if (!Array.isArray(test_items)) return 0;
+  return test_items.reduce((sum, item) => sum + getItemPrice(item.bar_size) * (Number(item.quantity) || 0), 0);
+}
+
+// ราคา/ชิ้น ของขนาดเหล็กเส้นหนึ่งรายการ (ตารางเดียวกับ calcTotalPrice)
+function getItemPrice(barSize) {
+  const row = PRICE_DATA.slice(1).find((r) => r[0] === barSize);
+  return row ? Number(row[1]) || 0 : 0;
+}
+
+// ดึงประกาศตาม id list (dual-mode: Sheets ถ้าตั้งค่า SPREADSHEET_ID ไว้ ไม่งั้นใช้ local JSON)
+async function getAnnouncementsByIds(ids) {
+  if (!ids || !ids.length) return [];
+  let all;
+  if (process.env.SPREADSHEET_ID) {
+    const sheets = await getSheets();
+    const header = ['announcementId', 'label', 'content', 'active', 'createdAt'];
+    await ensureSheetTab(sheets, process.env.SPREADSHEET_ID, 'Announcements', [header]);
+    const rows = await readSheet(process.env.SPREADSHEET_ID, 'Announcements!A:E');
+    all = rowsToObjects(rows);
+  } else {
+    all = localAnnouncements.getAll();
+  }
+  return ids.map((id) => all.find((a) => a.announcementId === id)).filter(Boolean);
 }
 
 // ── Build structured work-order spreadsheet FILE ──────────
@@ -362,6 +425,17 @@ async function buildWorkOrderSheet(workOrderData) {
     [q + '!A53', '1. เลขที่ใบเสร็จ'],
   );
 
+  // Selected announcements — note: spec text says "starting at A45", but A45-A49/A52-53
+  // already hold the static notes block above; writing there would silently overwrite it.
+  // Written at A56+ instead, one announcement's content per line.
+  if (wo.selected_announcements) {
+    const ids = String(wo.selected_announcements).split(',').map((s) => s.trim()).filter(Boolean);
+    const announcements = await getAnnouncementsByIds(ids);
+    announcements.forEach((a, i) => {
+      ranges.push([q + `!A${56 + i}`, a.content]);
+    });
+  }
+
   await sheets.spreadsheets.values.batchUpdate({
     spreadsheetId: newSpreadsheetId,
     requestBody: {
@@ -426,4 +500,9 @@ module.exports = {
   createWorkOrderSheet,
   buildWorkOrderSheet,
   readWorkOrderSheet,
+  getSheets,
+  ensureSheetTab,
+  deleteSheetRow,
+  calcTotalPrice,
+  getItemPrice,
 };

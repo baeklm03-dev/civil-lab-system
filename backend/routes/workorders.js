@@ -1,15 +1,47 @@
 const express = require('express');
-const { readSheet, appendSheet, updateSheet, rowsToObjects, createWorkOrderSheet, buildWorkOrderSheet, readWorkOrderSheet } = require('../services/sheetsService');
+const { readSheet, appendSheet, updateSheet, rowsToObjects, createWorkOrderSheet, buildWorkOrderSheet, readWorkOrderSheet, calcTotalPrice, getItemPrice } = require('../services/sheetsService');
 const localStore = require('../services/localStore');
 const { authMiddleware } = require('../middleware/auth');
+const { logActivity } = require('../services/activityLog');
 
 const router = express.Router();
-const RANGE = 'WorkOrders!A:P';
+// A:P = original 16 cols, Q:R = test_type/custom_test_name, S = selected_announcements
+const RANGE = 'WorkOrders!A:S';
 
 const useSheets = () => !!process.env.WORKORDERS_SHEET_ID;
 const useFormSheet = () => !!process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL;
 
 // ── helpers ──────────────────────────────────────────────
+
+// testType (concrete/steel/other) ถ้าไม่ได้ตั้งค่าไว้ (ใบงานเก่าก่อนมีฟีเจอร์นี้) ให้เดาจาก sample_type
+function resolveTestType(order) {
+  if (order.test_type) return order.test_type;
+  const t = (order.sample_type || '').toLowerCase();
+  if (['steel', 'rebar', 'db', 'rb', 'bar'].some((k) => t.includes(k))) return 'steel';
+  if (t) return 'concrete';
+  return 'other';
+}
+
+function filterByDateRange(orders, startDate, endDate) {
+  if (!startDate && !endDate) return orders;
+  return orders.filter((o) => {
+    if (!o.received_date) return false;
+    if (startDate && o.received_date < startDate) return false;
+    if (endDate && o.received_date > endDate) return false;
+    return true;
+  });
+}
+
+function getDailyTrend(orders) {
+  const counts = {};
+  orders.forEach((o) => {
+    if (!o.received_date) return;
+    counts[o.received_date] = (counts[o.received_date] || 0) + 1;
+  });
+  return Object.entries(counts)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([date, count]) => ({ date, count }));
+}
 
 function getLast6Months(orders) {
   const thaiMonths = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
@@ -45,6 +77,13 @@ function buildStats(orders) {
     },
     monthlyTrend: getLast6Months(orders),
     recent: [...orders].reverse().slice(0, 5),
+    byTestType: {
+      concrete: orders.filter((o) => resolveTestType(o) === 'concrete').length,
+      steel:    orders.filter((o) => resolveTestType(o) === 'steel').length,
+      other:    orders.filter((o) => resolveTestType(o) === 'other').length,
+    },
+    totalRevenue: orders.reduce((sum, o) => sum + calcTotalPrice(o.test_items), 0),
+    jobsOverTime: getDailyTrend(orders),
   };
 }
 
@@ -66,11 +105,17 @@ async function generateRefNo(orders) {
   return `${prefix}${String(todayCount + 1).padStart(2, '0')}`;
 }
 
+async function getDashboardSummary(startDate, endDate) {
+  const orders = await getAllOrders();
+  return buildStats(filterByDateRange(orders, startDate, endDate));
+}
+
 // ── GET /api/workorders/stats ─────────────────────────────
 router.get('/stats', authMiddleware, async (req, res) => {
   try {
-    const orders = await getAllOrders();
-    res.json({ success: true, data: buildStats(orders) });
+    const { startDate, endDate } = req.query;
+    const data = await getDashboardSummary(startDate, endDate);
+    res.json({ success: true, data });
   } catch (err) {
     console.error('Stats error:', err);
     res.status(500).json({ success: false, message: 'เกิดข้อผิดพลาดในการดึงสถิติ' });
@@ -80,9 +125,11 @@ router.get('/stats', authMiddleware, async (req, res) => {
 // ── GET /api/workorders ───────────────────────────────────
 router.get('/', authMiddleware, async (req, res) => {
   try {
-    const { status, search, page = 1, limit = 20 } = req.query;
+    const { status, search, page = 1, limit = 20, startDate, endDate, testType } = req.query;
     let orders = await getAllOrders();
 
+    orders = filterByDateRange(orders, startDate, endDate);
+    if (testType) orders = orders.filter((o) => resolveTestType(o) === testType);
     if (status && status !== 'ทั้งหมด') orders = orders.filter((o) => o.status === status);
     if (search) {
       const q = search.toLowerCase();
@@ -116,6 +163,49 @@ router.get('/:refNo', authMiddleware, async (req, res) => {
   }
 });
 
+// ── GET /api/workorders/:refNo/finance-summary ────────────
+router.get('/:refNo/finance-summary', authMiddleware, async (req, res) => {
+  try {
+    const orders = await getAllOrders();
+    const order = orders.find((o) => o.ref_no === req.params.refNo);
+    if (!order) return res.status(404).json({ success: false, message: 'ไม่พบใบงานนี้' });
+
+    const items = Array.isArray(order.test_items) ? order.test_items : [];
+    const totalSpecimens = items.reduce((sum, i) => sum + (Number(i.quantity) || 0), 0);
+    const totalPrice = calcTotalPrice(items);
+
+    const t = resolveTestType(order);
+    const testTypeLabel = t === 'concrete' ? 'คอนกรีต (Compression Test)'
+      : t === 'steel' ? 'เหล็กเส้น (Tension Test)'
+      : (order.custom_test_name || 'อื่นๆ');
+
+    const detailLines = items.map((i) => {
+      const price = getItemPrice(i.bar_size) * (Number(i.quantity) || 0);
+      return `${i.bar_size || '-'} x ${i.quantity || 0} ชิ้น = ${price} บาท`;
+    });
+
+    const summary = [
+      `ใบงานทดสอบ ${order.ref_no}`,
+      `ลูกค้า: ${order.customer_name || '-'} / ${order.company || '-'}`,
+      `โครงการ: ${order.project_name || '-'}`,
+      `ประเภทการทดสอบ: ${testTypeLabel}`,
+      `📦 จำนวนตัวอย่าง: ${totalSpecimens} ชิ้น`,
+      `💰 ค่าทดสอบรวม: ${totalPrice} บาท`,
+      `📅 วันที่รับงาน: ${order.received_date || '-'}`,
+      `รายละเอียด:`,
+      '',
+      ...detailLines,
+      '',
+      'กรุณาชำระเงินที่ตึก 81 ชั้น 3',
+    ].join('\n');
+
+    res.json({ success: true, summary });
+  } catch (err) {
+    console.error('Finance summary error:', err);
+    res.status(500).json({ success: false, message: 'เกิดข้อผิดพลาด' });
+  }
+});
+
 // ── helper: attempt form-sheet creation (non-fatal) ───────
 async function tryBuildFormSheet(record) {
   if (!useFormSheet()) return;
@@ -137,6 +227,8 @@ router.post('/', authMiddleware, async (req, res) => {
       customer_name, company, phone, specimen_from,
       receipt_name, receipt_address, tax_id,
       professor, received_by, test_items,
+      // test category (concrete/steel/other) — orthogonal to sample_type (specimen shape)
+      test_type, custom_test_name, selected_announcements,
     } = req.body;
 
     if (!sample_type) {
@@ -169,6 +261,9 @@ router.post('/', authMiddleware, async (req, res) => {
       professor: professor || '',
       received_by: received_by || '',
       test_items: test_items || [],
+      test_type: test_type || '',
+      custom_test_name: custom_test_name || '',
+      selected_announcements: selected_announcements || '',
     };
 
     // Legacy template copy (TEMPLATE_SHEET_ID) — kept for backward compat
@@ -193,12 +288,14 @@ router.post('/', authMiddleware, async (req, res) => {
         record.sheet_id, record.sheet_url, notes || '',
         created_by, now.toISOString(),
         '', '', '',
+        record.test_type, record.custom_test_name, record.selected_announcements,
       ];
-      await appendSheet(process.env.WORKORDERS_SHEET_ID, 'WorkOrders!A:P', [row]);
+      await appendSheet(process.env.WORKORDERS_SHEET_ID, RANGE, [row]);
     } else {
       localStore.append(record);
     }
 
+    await logActivity(req.user.id, req.user.username, 'CREATE_WORKORDER', `REF: ${ref_no}`, req.ip);
     res.status(201).json({ success: true, message: 'สร้างใบงานสำเร็จ', data: record });
   } catch (err) {
     console.error('Create workorder error:', err);
@@ -246,16 +343,20 @@ router.post('/import', authMiddleware, async (req, res) => {
         professor: wo.professor || '',
         received_by: wo.received_by || '',
         test_items: wo.test_items || [],
+        test_type: wo.test_type || '',
+        custom_test_name: wo.custom_test_name || '',
+        selected_announcements: wo.selected_announcements || '',
       };
 
       await tryBuildFormSheet(record);
 
       if (useSheets()) {
-        await appendSheet(process.env.WORKORDERS_SHEET_ID, 'WorkOrders!A:P', [[
+        await appendSheet(process.env.WORKORDERS_SHEET_ID, RANGE, [[
           record.ref_no, record.project_name, record.contractor, record.sample_type,
           record.sample_count, record.test_age_days, record.received_date, record.status,
           record.sheet_id, record.sheet_url, record.notes,
           record.created_by, record.created_at, '', '', '',
+          record.test_type, record.custom_test_name, record.selected_announcements,
         ]]);
       } else {
         localStore.append(record);
@@ -425,3 +526,6 @@ router.post('/:refNo/create-sheet', authMiddleware, async (req, res) => {
 });
 
 module.exports = router;
+module.exports.getDashboardSummary = getDashboardSummary;
+module.exports.resolveTestType = resolveTestType;
+module.exports.filterByDateRange = filterByDateRange;

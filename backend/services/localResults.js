@@ -1,7 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 
-const DATA_FILE = path.join(__dirname, '../data/personnel.json');
+const DATA_FILE = path.join(__dirname, '../data/test-results.json');
 
 function ensureFile() {
   const dir = path.dirname(DATA_FILE);
@@ -29,18 +29,18 @@ function append(record) {
   return record;
 }
 
-function updateOne(id, fields) {
+function updateOne(resultId, fields) {
   const all = readAll();
-  const idx = all.findIndex((p) => p.id === id);
+  const idx = all.findIndex((r) => r.resultId === resultId);
   if (idx === -1) return null;
   all[idx] = { ...all[idx], ...fields };
   writeAll(all);
   return all[idx];
 }
 
-function deleteOne(id) {
+function deleteOne(resultId) {
   const all = readAll();
-  const idx = all.findIndex((p) => p.id === id);
+  const idx = all.findIndex((r) => r.resultId === resultId);
   if (idx === -1) return false;
   all.splice(idx, 1);
   writeAll(all);

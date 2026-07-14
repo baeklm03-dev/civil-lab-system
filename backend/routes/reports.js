@@ -4,6 +4,7 @@ const fs = require('fs');
 const { authMiddleware } = require('../middleware/auth');
 const { generateCompressionHTML } = require('../templates/compressionReport');
 const { generateTensionHTML } = require('../templates/tensionReport');
+const { logActivity } = require('../services/activityLog');
 
 const router = express.Router();
 
@@ -67,6 +68,7 @@ router.post('/generate', authMiddleware, async (req, res) => {
       'Content-Length': pdf.length,
     });
     res.send(Buffer.from(pdf));
+    await logActivity(req.user.id, req.user.username, 'GENERATE_PDF', `WorkOrder: ${order?.ref_no || 'unknown'}`, req.ip);
   } catch (err) {
     console.error('PDF generation error:', err);
     res.status(500).json({ success: false, message: 'เกิดข้อผิดพลาดในการสร้าง PDF: ' + err.message });

@@ -4,16 +4,45 @@ const fs = require('fs');
 const path = require('path');
 const { authMiddleware } = require('../middleware/auth');
 const localStore = require('../services/localStore');
-const { readSheet, rowsToObjects } = require('../services/sheetsService');
+const localResults = require('../services/localResults');
+const { readSheet, rowsToObjects, calcTotalPrice } = require('../services/sheetsService');
+const workorderRoutes = require('./workorders');
+const { logActivity } = require('../services/activityLog');
 
 const useSheets = () => !!process.env.WORKORDERS_SHEET_ID;
 
 async function getAllOrders() {
   if (useSheets()) {
-    const rows = await readSheet(process.env.WORKORDERS_SHEET_ID, 'WorkOrders!A:P');
+    const rows = await readSheet(process.env.WORKORDERS_SHEET_ID, 'WorkOrders!A:S');
     return rowsToObjects(rows);
   }
   return localStore.getAll();
+}
+
+// workOrderId (ref_no) → วันที่บันทึกผลทดสอบล่าสุด (จาก TestResults)
+async function getLatestTestDates() {
+  let results = [];
+  if (process.env.SPREADSHEET_ID) {
+    try {
+      const rows = await readSheet(process.env.SPREADSHEET_ID, 'TestResults!A:Q');
+      results = rowsToObjects(rows);
+    } catch { results = []; }
+  } else {
+    results = localResults.getAll();
+  }
+  const latest = {};
+  results.forEach((r) => {
+    if (!r.workOrderId || !r.createdAt) return;
+    if (!latest[r.workOrderId] || r.createdAt > latest[r.workOrderId]) latest[r.workOrderId] = r.createdAt;
+  });
+  return latest;
+}
+
+function testTypeLabel(order) {
+  const t = workorderRoutes.resolveTestType(order);
+  if (t === 'concrete') return 'คอนกรีต (Compression Test)';
+  if (t === 'steel') return 'เหล็กเส้น (Tension Test)';
+  return order.custom_test_name || 'อื่นๆ';
 }
 
 // Load Chart.js UMD bundle once at startup so Puppeteer doesn't need CDN
@@ -324,6 +353,70 @@ router.get('/dashboard', authMiddleware, async (req, res) => {
 
   } catch (err) {
     console.error('Export error:', err);
+    res.status(500).json({ success: false, message: 'เกิดข้อผิดพลาดในการ export: ' + err.message });
+  }
+});
+
+// GET /api/export — รายการใบงาน filter ตามช่วงวันที่/ประเภทการทดสอบ, ไฟล์ xlsx หรือ csv
+router.get('/', authMiddleware, async (req, res) => {
+  try {
+    const { startDate, endDate, testType, format = 'xlsx' } = req.query;
+
+    let orders = await getAllOrders();
+    orders = workorderRoutes.filterByDateRange(orders, startDate, endDate);
+    if (testType) orders = orders.filter((o) => workorderRoutes.resolveTestType(o) === testType);
+
+    const testedDates = await getLatestTestDates();
+    const headers = ['REF NO.', 'ประเภทการทดสอบ', 'ชื่อลูกค้า', 'บริษัท', 'ชื่อโครงการ', 'จำนวนตัวอย่าง', 'ราคารวม', 'วันที่รับงาน', 'วันที่ทดสอบ', 'สถานะ'];
+    const rows = orders.map((o) => ([
+      o.ref_no || '',
+      testTypeLabel(o),
+      o.customer_name || '',
+      o.company || '',
+      o.project_name || '',
+      o.sample_count || '',
+      calcTotalPrice(o.test_items),
+      o.received_date || '',
+      testedDates[o.ref_no] ? testedDates[o.ref_no].slice(0, 10) : '',
+      o.status || '',
+    ]));
+
+    const dateTag = new Date().toISOString().slice(0, 10);
+
+    if (format === 'csv') {
+      const csvBody = [headers, ...rows]
+        .map((r) => r.map((v) => `"${String(v ?? '').replace(/"/g, '""')}"`).join(','))
+        .join('\r\n');
+      res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+      res.setHeader('Content-Disposition', `attachment; filename="workorders-${dateTag}.csv"`);
+      res.send('﻿' + csvBody);
+      await logActivity(req.user.id, req.user.username, 'EXPORT_DATA', `Format: csv, Range: ${startDate || ''}–${endDate || ''}`, req.ip);
+      return;
+    }
+
+    const wb = new ExcelJS.Workbook();
+    wb.creator = 'Civil Lab System';
+    wb.created = new Date();
+    const ws = wb.addWorksheet('ใบงานทดสอบ');
+
+    const headerRow = ws.addRow(headers);
+    headerRow.eachCell((cell) => {
+      cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFEA580C' } };
+      cell.alignment = { horizontal: 'center', vertical: 'middle' };
+    });
+    headerRow.height = 22;
+    rows.forEach((r) => ws.addRow(r));
+    ws.columns.forEach((c) => { c.width = 18; });
+    ws.views = [{ state: 'frozen', ySplit: 1 }];
+
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="workorders-${dateTag}.xlsx"`);
+    await wb.xlsx.write(res);
+    res.end();
+    await logActivity(req.user.id, req.user.username, 'EXPORT_DATA', `Format: ${format}, Range: ${startDate || ''}–${endDate || ''}`, req.ip);
+  } catch (err) {
+    console.error('Export list error:', err);
     res.status(500).json({ success: false, message: 'เกิดข้อผิดพลาดในการ export: ' + err.message });
   }
 });
