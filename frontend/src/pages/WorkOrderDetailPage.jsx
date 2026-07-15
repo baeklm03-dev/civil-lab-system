@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { workorderAPI, personnelAPI, reportAPI } from '../services/api'
+import { useToast } from '../hooks/useToast'
 import logo from '../logo.png'
 
 const STATUSES = ['รับเรื่อง', 'รอข้อมูล', 'ดำเนินการ', 'เสร็จสิ้น']
@@ -27,6 +28,52 @@ function Section({ title, children }) {
       <h2 className="text-sm font-medium text-gray-700">{title}</h2>
       {children}
     </div>
+  )
+}
+
+// ── Finance Summary Card ───────────────────────────────────
+function FinanceSummaryCard({ refNo }) {
+  const [text, setText] = useState('')
+  const [loading, setLoading] = useState(true)
+  const { showToast } = useToast()
+
+  useEffect(() => {
+    workorderAPI.getFinanceSummary(refNo)
+      .then(({ data }) => setText(data.summary || ''))
+      .catch(() => setText(''))
+      .finally(() => setLoading(false))
+  }, [refNo])
+
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(text)
+      showToast('คัดลอกแล้ว ✓')
+    } catch {
+      showToast('คัดลอกไม่สำเร็จ')
+    }
+  }
+
+  return (
+    <Section title="📢 ข้อความแจ้งการเงิน (สำหรับส่งไลน์)">
+      {loading ? (
+        <p className="text-xs text-gray-400">กำลังโหลด...</p>
+      ) : (
+        <>
+          <textarea
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            rows={10}
+            className="w-full px-3 py-2.5 rounded-lg border border-gray-200 text-sm font-mono focus:outline-none focus:border-orange-400 bg-gray-50 resize-y"
+          />
+          <button
+            onClick={handleCopy}
+            className="flex items-center gap-1.5 text-sm px-3.5 py-2 bg-orange-400 text-white rounded-lg hover:bg-orange-500 transition-colors"
+          >
+            <i className="ti ti-clipboard text-sm" /> 📋 Copy
+          </button>
+        </>
+      )}
+    </Section>
   )
 }
 
@@ -861,6 +908,8 @@ export default function WorkOrderDetailPage() {
               </button>
             </Section>
           )}
+
+          <FinanceSummaryCard refNo={order.ref_no} />
         </div>
 
         {/* RIGHT */}

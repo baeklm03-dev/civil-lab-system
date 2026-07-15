@@ -13,7 +13,7 @@ const useSheets = () => !!process.env.WORKORDERS_SHEET_ID;
 
 async function getAllOrders() {
   if (useSheets()) {
-    const rows = await readSheet(process.env.WORKORDERS_SHEET_ID, 'WorkOrders!A:S');
+    const rows = await readSheet(process.env.WORKORDERS_SHEET_ID, 'WorkOrders!A:T');
     return rowsToObjects(rows);
   }
   return localStore.getAll();

@@ -5,8 +5,8 @@ const { authMiddleware } = require('../middleware/auth');
 const { logActivity } = require('../services/activityLog');
 
 const router = express.Router();
-// A:P = original 16 cols, Q:R = test_type/custom_test_name, S = selected_announcements
-const RANGE = 'WorkOrders!A:S';
+// A:P = original 16 cols, Q:R = test_type/custom_test_name, S = selected_announcements, T = custom_columns (JSON)
+const RANGE = 'WorkOrders!A:T';
 
 const useSheets = () => !!process.env.WORKORDERS_SHEET_ID;
 const useFormSheet = () => !!process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL;
@@ -87,12 +87,21 @@ function buildStats(orders) {
   };
 }
 
+function parseCustomColumns(order) {
+  if (Array.isArray(order.custom_columns)) return order;
+  try {
+    return { ...order, custom_columns: order.custom_columns ? JSON.parse(order.custom_columns) : [] };
+  } catch {
+    return { ...order, custom_columns: [] };
+  }
+}
+
 async function getAllOrders() {
   if (useSheets()) {
     const rows = await readSheet(process.env.WORKORDERS_SHEET_ID, RANGE);
-    return rowsToObjects(rows);
+    return rowsToObjects(rows).map(parseCustomColumns);
   }
-  return localStore.getAll();
+  return localStore.getAll().map(parseCustomColumns);
 }
 
 async function generateRefNo(orders) {
@@ -228,7 +237,7 @@ router.post('/', authMiddleware, async (req, res) => {
       receipt_name, receipt_address, tax_id,
       professor, received_by, test_items,
       // test category (concrete/steel/other) — orthogonal to sample_type (specimen shape)
-      test_type, custom_test_name, selected_announcements,
+      test_type, custom_test_name, selected_announcements, custom_columns,
     } = req.body;
 
     if (!sample_type) {
@@ -264,6 +273,7 @@ router.post('/', authMiddleware, async (req, res) => {
       test_type: test_type || '',
       custom_test_name: custom_test_name || '',
       selected_announcements: selected_announcements || '',
+      custom_columns: Array.isArray(custom_columns) ? custom_columns : [],
     };
 
     // Legacy template copy (TEMPLATE_SHEET_ID) — kept for backward compat
@@ -289,6 +299,7 @@ router.post('/', authMiddleware, async (req, res) => {
         created_by, now.toISOString(),
         '', '', '',
         record.test_type, record.custom_test_name, record.selected_announcements,
+        JSON.stringify(record.custom_columns),
       ];
       await appendSheet(process.env.WORKORDERS_SHEET_ID, RANGE, [row]);
     } else {
@@ -346,6 +357,7 @@ router.post('/import', authMiddleware, async (req, res) => {
         test_type: wo.test_type || '',
         custom_test_name: wo.custom_test_name || '',
         selected_announcements: wo.selected_announcements || '',
+        custom_columns: Array.isArray(wo.custom_columns) ? wo.custom_columns : [],
       };
 
       await tryBuildFormSheet(record);
@@ -357,6 +369,7 @@ router.post('/import', authMiddleware, async (req, res) => {
           record.sheet_id, record.sheet_url, record.notes,
           record.created_by, record.created_at, '', '', '',
           record.test_type, record.custom_test_name, record.selected_announcements,
+          JSON.stringify(record.custom_columns),
         ]]);
       } else {
         localStore.append(record);
@@ -396,6 +409,34 @@ router.patch('/:refNo/status', authMiddleware, async (req, res) => {
     res.json({ success: true, message: 'อัปเดตสถานะสำเร็จ' });
   } catch (err) {
     console.error('Update status error:', err);
+    res.status(500).json({ success: false, message: 'เกิดข้อผิดพลาด' });
+  }
+});
+
+// ── PATCH /api/workorders/:refNo/custom-columns ───────────
+router.patch('/:refNo/custom-columns', authMiddleware, async (req, res) => {
+  try {
+    const { custom_columns } = req.body;
+    if (!Array.isArray(custom_columns)) {
+      return res.status(400).json({ success: false, message: 'custom_columns ต้องเป็น array' });
+    }
+
+    if (useSheets()) {
+      const rows = await readSheet(process.env.WORKORDERS_SHEET_ID, RANGE);
+      const [headers, ...dataRows] = rows;
+      const rowIndex = dataRows.findIndex((r) => r[0] === req.params.refNo);
+      if (rowIndex === -1) return res.status(404).json({ success: false, message: 'ไม่พบใบงานนี้' });
+      const col = headers.indexOf('custom_columns');
+      const colLetter = String.fromCharCode(65 + col);
+      await updateSheet(process.env.WORKORDERS_SHEET_ID, `WorkOrders!${colLetter}${rowIndex + 2}`, [[JSON.stringify(custom_columns)]]);
+    } else {
+      const updated = localStore.updateOne(req.params.refNo, { custom_columns });
+      if (!updated) return res.status(404).json({ success: false, message: 'ไม่พบใบงานนี้' });
+    }
+
+    res.json({ success: true, message: 'อัปเดตคอลัมน์สำเร็จ' });
+  } catch (err) {
+    console.error('Update custom-columns error:', err);
     res.status(500).json({ success: false, message: 'เกิดข้อผิดพลาด' });
   }
 });

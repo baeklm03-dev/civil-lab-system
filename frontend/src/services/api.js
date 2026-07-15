@@ -35,7 +35,7 @@ export const authAPI = {
 // Work Orders
 export const workorderAPI = {
   getAll: (params) => api.get('/workorders', { params }),
-  getStats: () => api.get('/workorders/stats'),
+  getStats: (params) => api.get('/workorders/stats', { params }),
   getOne: (refNo) => api.get(`/workorders/${refNo}`),
   create: (data) => api.post('/workorders', data),
   updateStatus: (refNo, status) => api.patch(`/workorders/${refNo}/status`, { status }),
@@ -43,6 +43,8 @@ export const workorderAPI = {
   createSheet: (refNo, extra) => api.post(`/workorders/${refNo}/create-sheet`, extra || {}),
   syncSheet: (refNo) => api.post(`/workorders/${refNo}/sync-sheet`),
   importOrders: (workOrders) => api.post('/workorders/import', { workOrders }),
+  getFinanceSummary: (refNo) => api.get(`/workorders/${refNo}/finance-summary`),
+  updateCustomColumns: (refNo, custom_columns) => api.patch(`/workorders/${refNo}/custom-columns`, { custom_columns }),
 }
 
 // Personnel
@@ -61,6 +63,40 @@ export const reportAPI = {
 // Export
 export const exportAPI = {
   dashboard: () => api.get('/export/dashboard', { responseType: 'arraybuffer', timeout: 60000 }),
+  list: (params) => api.get('/export', { params, responseType: 'arraybuffer', timeout: 60000 }),
+}
+
+// Test Results
+export const resultsAPI = {
+  getAll: (params) => api.get('/results', { params }),
+  create: (data) => api.post('/results', data),
+  update: (id, data) => api.put(`/results/${id}`, data),
+  remove: (id) => api.delete(`/results/${id}`),
+}
+
+// Announcements
+export const announcementAPI = {
+  getAll: (params) => api.get('/announcements', { params }),
+  create: (data) => api.post('/announcements', data),
+  update: (id, data) => api.put(`/announcements/${id}`, data),
+  toggleStatus: (id, active) => api.patch(`/announcements/${id}/status`, { active }),
+  remove: (id) => api.delete(`/announcements/${id}`),
+}
+
+// Admin — Users
+export const adminUsersAPI = {
+  getAll: () => api.get('/admin/users'),
+  create: (data) => api.post('/admin/users', data),
+  update: (id, data) => api.put(`/admin/users/${id}`, data),
+  toggleStatus: (id, status) => api.patch(`/admin/users/${id}/status`, { status }),
+  remove: (id) => api.delete(`/admin/users/${id}`),
+  resetPassword: (id, newPassword) => api.post(`/admin/users/${id}/reset-password`, { newPassword }),
+}
+
+// Admin — Activity Log
+export const adminLogsAPI = {
+  getAll: (params) => api.get('/admin/logs', { params }),
+  exportCsv: (params) => api.get('/admin/logs/export', { params, responseType: 'arraybuffer', timeout: 60000 }),
 }
 
 export default api

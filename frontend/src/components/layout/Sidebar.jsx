@@ -3,9 +3,17 @@ import { useAuth } from '../../hooks/useAuth'
 import logo from '../../logo.png'
 
 const navItems = [
-  { to: '/dashboard',  icon: 'ti-layout-dashboard',  label: 'ภาพรวมระบบ' },
-  { to: '/workorders', icon: 'ti-file-text',          label: 'ใบงานทดสอบ' },
-  { to: '/personnel',  icon: 'ti-users',              label: 'จัดการบุคลากร' },
+  { to: '/dashboard',      icon: 'ti-layout-dashboard', label: 'ภาพรวมระบบ' },
+  { to: '/workorders',     icon: 'ti-file-text',        label: 'ใบงานทดสอบ' },
+  { to: '/record-results', icon: 'ti-clipboard-check',  label: 'บันทึกผลการทดสอบ' },
+  { to: '/print-form',     icon: 'ti-printer',          label: 'พิมพ์แบบฟอร์ม' },
+  { to: '/personnel',      icon: 'ti-users',            label: 'จัดการบุคลากร' },
+]
+
+const settingsItems = [
+  { to: '/admin/users',         icon: 'ti-user-cog',   label: 'จัดการผู้ใช้งาน',   roles: ['superadmin'] },
+  { to: '/admin/logs',          icon: 'ti-history',     label: 'ประวัติการใช้งาน',  roles: ['superadmin'] },
+  { to: '/admin/announcements', icon: 'ti-speakerphone', label: 'จัดการข้อความแจ้ง', roles: ['admin', 'superadmin'] },
 ]
 
 export default function Sidebar() {
@@ -20,6 +28,8 @@ export default function Sidebar() {
   const initials = user?.name
     ? user.name.split(' ').map((n) => n[0]).join('').slice(0, 2).toUpperCase()
     : 'US'
+
+  const visibleSettingsItems = settingsItems.filter((item) => item.roles.includes(user?.role))
 
   return (
     <aside className="w-56 bg-white border-r border-gray-100 flex flex-col shrink-0 h-screen sticky top-0">
@@ -50,6 +60,28 @@ export default function Sidebar() {
             {label}
           </NavLink>
         ))}
+
+        {visibleSettingsItems.length > 0 && (
+          <>
+            <p className="px-4 pt-4 pb-1.5 text-xs font-medium text-gray-400 uppercase tracking-wide">ตั้งค่า</p>
+            {visibleSettingsItems.map(({ to, icon, label }) => (
+              <NavLink
+                key={to}
+                to={to}
+                className={({ isActive }) =>
+                  `flex items-center gap-2.5 px-4 py-2.5 text-sm transition-colors ${
+                    isActive
+                      ? 'bg-orange-50 text-orange-400 border-r-2 border-orange-400 font-medium'
+                      : 'text-gray-500 hover:bg-gray-50 hover:text-gray-700'
+                  }`
+                }
+              >
+                <i className={`ti ${icon} text-base`} aria-hidden="true" />
+                {label}
+              </NavLink>
+            ))}
+          </>
+        )}
       </nav>
 
       {/* Footer / User */}

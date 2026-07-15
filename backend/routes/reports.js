@@ -10,12 +10,12 @@ const router = express.Router();
 
 let logoBase64 = '';
 try {
-  const logoPath = path.join(__dirname, '../assets/logo.png');
+  const logoPath = path.join(__dirname, '../../frontend/src/mono-logo.png');
   if (fs.existsSync(logoPath)) {
     logoBase64 = `data:image/png;base64,${fs.readFileSync(logoPath).toString('base64')}`;
   }
 } catch {
-  console.warn('PDF: logo.png not found in backend/assets/');
+  console.warn('PDF: mono-logo.png not found in frontend/src/');
 }
 
 // POST /api/reports/generate

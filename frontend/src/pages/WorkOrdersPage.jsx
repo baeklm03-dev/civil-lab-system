@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from 'react'
 import { useSearchParams, useNavigate } from 'react-router-dom'
-import { workorderAPI, personnelAPI } from '../services/api'
+import { workorderAPI, personnelAPI, announcementAPI } from '../services/api'
 
 const STATUSES = ['ทั้งหมด', 'รับเรื่อง', 'รอข้อมูล', 'ดำเนินการ', 'เสร็จสิ้น']
 
@@ -127,11 +127,21 @@ function ImportModal({ onClose, onImported }) {
 }
 
 // ── Create Modal ──
+const TEST_TYPES = [
+  { v: 'concrete', label: 'คอนกรีต' },
+  { v: 'steel', label: 'เหล็กเส้น' },
+  { v: 'other', label: 'อื่นๆ' },
+]
+
 function CreateModal({ onClose, onCreated, nextSeq }) {
   const [form, setForm] = useState({
     project_name: '', contractor: '', sample_type: 'Cube',
     sample_type_other: '', notes: '', professor: '',
+    test_type: 'concrete', custom_test_name: '',
   })
+  const [customColumns, setCustomColumns] = useState([{ name: '', unit: '' }])
+  const [announcements, setAnnouncements] = useState([])
+  const [selectedAnnouncements, setSelectedAnnouncements] = useState([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [professors, setProfessors] = useState([])
@@ -140,9 +150,20 @@ function CreateModal({ onClose, onCreated, nextSeq }) {
     personnelAPI.getAll({ role: 'professor', active: 'true' })
       .then(({ data }) => setProfessors(data.data || []))
       .catch(() => {})
+    announcementAPI.getAll({ activeOnly: 'true' })
+      .then(({ data }) => setAnnouncements(data.data || []))
+      .catch(() => {})
   }, [])
 
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }))
+
+  const toggleAnnouncement = (id) => {
+    setSelectedAnnouncements((sel) => sel.includes(id) ? sel.filter((x) => x !== id) : [...sel, id])
+  }
+
+  const updateColumn = (idx, key, val) => {
+    setCustomColumns((cols) => cols.map((c, i) => i === idx ? { ...c, [key]: val } : c))
+  }
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -150,11 +171,18 @@ function CreateModal({ onClose, onCreated, nextSeq }) {
     if (form.sample_type === 'Other' && !form.sample_type_other.trim()) {
       setError('กรุณาระบุประเภทตัวอย่าง'); return
     }
+    if (form.test_type === 'other' && !form.custom_test_name.trim()) {
+      setError('กรุณาระบุชื่อประเภทการทดสอบ'); return
+    }
     setLoading(true)
     try {
       const payload = {
         ...form,
         sample_type: form.sample_type === 'Other' ? form.sample_type_other.trim() : form.sample_type,
+        selected_announcements: selectedAnnouncements.join(','),
+        custom_columns: form.test_type === 'other'
+          ? customColumns.filter((c) => c.name.trim())
+          : [],
       }
       delete payload.sample_type_other
       const { data } = await workorderAPI.create(payload)
@@ -213,6 +241,76 @@ function CreateModal({ onClose, onCreated, nextSeq }) {
                 />
               )}
             </div>
+
+            <div className="flex flex-col gap-1.5">
+              <label className="text-sm text-gray-700">ประเภทการทดสอบ <span className="text-red-400">*</span></label>
+              <div className="flex gap-2">
+                {TEST_TYPES.map(({ v, label }) => (
+                  <button
+                    key={v}
+                    type="button"
+                    onClick={() => setForm((f) => ({ ...f, test_type: v }))}
+                    className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg border text-sm transition-colors ${
+                      form.test_type === v
+                        ? 'border-orange-400 bg-orange-50 text-orange-600 font-medium'
+                        : 'border-gray-200 text-gray-500 hover:border-gray-300'
+                    }`}
+                  >
+                    <span className={`inline-block w-3 h-3 rounded-full border ${form.test_type === v ? 'border-orange-400 bg-orange-400' : 'border-gray-300'}`} />
+                    {label}
+                  </button>
+                ))}
+              </div>
+              {form.test_type === 'other' && (
+                <div className="space-y-3 pt-1">
+                  <input
+                    value={form.custom_test_name}
+                    onChange={set('custom_test_name')}
+                    placeholder="ระบุชื่อประเภทการทดสอบ..."
+                    autoFocus
+                    className="w-full px-3 py-2.5 rounded-lg border border-orange-300 text-sm focus:outline-none focus:border-orange-400 bg-orange-50"
+                  />
+                  <div className="border border-gray-200 rounded-lg p-3 space-y-2">
+                    <p className="text-xs text-gray-500">คอลัมน์ผลทดสอบ (ชื่อ + หน่วย)</p>
+                    {customColumns.map((col, i) => (
+                      <div key={i} className="flex gap-2">
+                        <input value={col.name} onChange={(e) => updateColumn(i, 'name', e.target.value)}
+                          placeholder="ชื่อคอลัมน์" className="flex-1 px-2.5 py-1.5 text-xs border border-gray-200 rounded-lg bg-white focus:outline-none focus:border-orange-400" />
+                        <input value={col.unit} onChange={(e) => updateColumn(i, 'unit', e.target.value)}
+                          placeholder="หน่วย" className="w-20 px-2.5 py-1.5 text-xs border border-gray-200 rounded-lg bg-white focus:outline-none focus:border-orange-400" />
+                        {customColumns.length > 1 && (
+                          <button type="button" onClick={() => setCustomColumns((cols) => cols.filter((_, idx) => idx !== i))}
+                            className="text-red-400 hover:text-red-600 px-1"><i className="ti ti-trash text-xs" /></button>
+                        )}
+                      </div>
+                    ))}
+                    <button type="button" onClick={() => setCustomColumns((cols) => [...cols, { name: '', unit: '' }])}
+                      className="text-xs text-orange-400 hover:underline flex items-center gap-1">
+                      <i className="ti ti-plus text-xs" /> เพิ่มคอลัมน์
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {announcements.length > 0 && (
+              <div className="flex flex-col gap-1.5">
+                <label className="text-sm text-gray-700">ข้อความแจ้งในใบงาน</label>
+                <div className="border border-gray-200 rounded-lg p-3 space-y-2 max-h-32 overflow-y-auto">
+                  {announcements.map((a) => (
+                    <label key={a.announcementId} className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={selectedAnnouncements.includes(a.announcementId)}
+                        onChange={() => toggleAnnouncement(a.announcementId)}
+                        className="accent-orange-400"
+                      />
+                      {a.label}
+                    </label>
+                  ))}
+                </div>
+              </div>
+            )}
 
             <div className="flex flex-col gap-1.5">
               <label className="text-sm text-gray-700">อาจารย์ผู้ทดสอบ</label>

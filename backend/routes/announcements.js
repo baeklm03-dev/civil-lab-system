@@ -30,7 +30,7 @@ router.get('/', authMiddleware, async (req, res) => {
   try {
     const { activeOnly = 'true' } = req.query;
     let list = await getAll();
-    if (activeOnly === 'true') list = list.filter((a) => a.active === 'true');
+    if (activeOnly === 'true') list = list.filter((a) => String(a.active).toLowerCase() === 'true');
     res.json({ success: true, data: list });
   } catch (err) {
     console.error('Get announcements error:', err);

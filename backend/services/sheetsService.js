@@ -105,12 +105,16 @@ async function readSheet(spreadsheetId, range) {
 }
 
 // เขียนข้อมูลต่อท้าย Sheet
+// หมายเหตุ: ใช้ RAW (ไม่ใช่ USER_ENTERED) เพราะแอปนี้อ่านค่ากลับมาเป็น string เสมอ (ผ่าน rowsToObjects)
+// USER_ENTERED จะทำให้ Sheets ตีความ "true"/"false" เป็น boolean และวันที่แบบ YYYY-MM-DD เป็น date
+// serial แล้วอ่านกลับมาไม่ตรงกับที่เขียนไป (เช่น "true" -> "TRUE") — ไม่กระทบ buildWorkOrderSheet
+// ที่เขียนสูตร/ตัวเลขราคาตรงผ่าน sheets.spreadsheets.values.* โดยตรง (ไม่ผ่าน helper นี้)
 async function appendSheet(spreadsheetId, range, values) {
   const sheets = await getSheets();
   const res = await sheets.spreadsheets.values.append({
     spreadsheetId,
     range,
-    valueInputOption: 'USER_ENTERED',
+    valueInputOption: 'RAW',
     insertDataOption: 'INSERT_ROWS',
     requestBody: { values },
   });
@@ -123,7 +127,7 @@ async function updateSheet(spreadsheetId, range, values) {
   const res = await sheets.spreadsheets.values.update({
     spreadsheetId,
     range,
-    valueInputOption: 'USER_ENTERED',
+    valueInputOption: 'RAW',
     requestBody: { values },
   });
   return res.data;
