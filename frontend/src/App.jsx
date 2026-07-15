@@ -48,7 +48,7 @@ export default function App() {
             <Route path="workorders/:refNo" element={<WorkOrderDetailPage />} />
             <Route path="personnel"  element={<PersonnelPage />} />
             <Route path="record-results" element={<RecordResultsPage />} />
-            <Route path="print-form" element={<PrintFormPage />} />
+            <Route path="workorders/:refNo/print-form" element={<PrintFormPage />} />
             <Route path="admin/users" element={<RoleRoute roles={['superadmin']}><AdminUsersPage /></RoleRoute>} />
             <Route path="admin/logs" element={<RoleRoute roles={['superadmin']}><AdminLogsPage /></RoleRoute>} />
             <Route path="admin/announcements" element={<RoleRoute roles={['admin', 'superadmin']}><AdminAnnouncementsPage /></RoleRoute>} />

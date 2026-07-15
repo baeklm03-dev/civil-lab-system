@@ -94,103 +94,11 @@ function Modal({ title, onClose, children, wide }) {
   )
 }
 
-// ── บันทึกผลการทดสอบ ──────────────────────────────────────
-function ResultModal({ order, onClose, onSaved }) {
-  const [form, setForm] = useState({
-    load_kn:              order.load_kn || '',
-    weight_kg:            order.weight_kg || '',
-    area_cm2:             order.area_cm2 || '',
-    compressive_strength: order.compressive_strength || '',
-    result_notes:         order.result_notes || '',
-  })
-  const [saving, setSaving] = useState(false)
-  const set = (k) => (e) => {
-    const val = e.target.value
-    setForm((f) => {
-      const next = { ...f, [k]: val }
-      // คำนวณ MPa อัตโนมัติจาก kN และ cm²
-      if ((k === 'load_kn' || k === 'area_cm2')) {
-        const kn = parseFloat(k === 'load_kn' ? val : f.load_kn)
-        const area = parseFloat(k === 'area_cm2' ? val : f.area_cm2)
-        if (!isNaN(kn) && !isNaN(area) && area > 0) {
-          next.compressive_strength = (kn * 10 / area).toFixed(2)
-        }
-      }
-      return next
-    })
-  }
-
-  const handleSubmit = async (e) => {
-    e.preventDefault()
-    setSaving(true)
-    try {
-      await workorderAPI.saveResult(order.ref_no, form)
-      onSaved({ ...form, status: 'เสร็จสิ้น' })
-      onClose()
-    } catch { alert('บันทึกผลไม่สำเร็จ') }
-    finally { setSaving(false) }
-  }
-
-  const Field = ({ label, k, placeholder, unit, readOnly }) => (
-    <div className="flex flex-col gap-1.5">
-      <label className="text-xs text-gray-500">{label}</label>
-      <div className="relative">
-        <input
-          type="number" step="0.01" min="0"
-          value={form[k]}
-          onChange={set(k)}
-          placeholder={placeholder}
-          readOnly={readOnly}
-          className={`w-full px-3 py-2.5 rounded-lg border text-sm focus:outline-none focus:border-orange-400 ${
-            readOnly ? 'bg-orange-50 border-orange-200 text-orange-700 font-medium' : 'bg-gray-50 border-gray-200'
-          } ${unit ? 'pr-14' : ''}`}
-        />
-        {unit && (
-          <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-gray-400">{unit}</span>
-        )}
-      </div>
-    </div>
-  )
-
-  return (
-    <Modal title="บันทึกผลการทดสอบ" onClose={onClose}>
-      <form onSubmit={handleSubmit}>
-        <div className="px-6 py-5 space-y-4">
-          <div className="grid grid-cols-2 gap-4">
-            <Field label="แรงกด *"                    k="load_kn"   placeholder="เช่น 450"    unit="kN" />
-            <Field label="น้ำหนักตัวอย่าง"            k="weight_kg" placeholder="เช่น 8.5"    unit="kg" />
-            <Field label="พื้นที่หน้าตัด (ขนาดตัวอย่าง)" k="area_cm2"  placeholder="เช่น 225"   unit="cm²" />
-            <Field label="กำลังอัด (คำนวณอัตโนมัติ)"  k="compressive_strength" placeholder="—" unit="MPa" readOnly />
-          </div>
-          <div className="flex flex-col gap-1.5">
-            <label className="text-xs text-gray-500">หมายเหตุ</label>
-            <textarea
-              value={form.result_notes}
-              onChange={(e) => setForm((f) => ({ ...f, result_notes: e.target.value }))}
-              rows={2} placeholder="ข้อมูลเพิ่มเติม..."
-              className="px-3 py-2.5 rounded-lg border border-gray-200 text-sm focus:outline-none focus:border-orange-400 bg-gray-50 resize-none"
-            />
-          </div>
-          <p className="text-xs text-gray-400">* กำลังอัด (MPa) = แรงกด (kN) × 10 ÷ พื้นที่หน้าตัด (cm²)</p>
-        </div>
-        <div className="px-6 py-4 border-t border-gray-100 flex justify-end gap-2">
-          <button type="button" onClick={onClose}
-            className="text-sm px-4 py-2 border border-gray-200 rounded-lg hover:bg-gray-50">
-            ยกเลิก
-          </button>
-          <button type="submit" disabled={saving || !form.load_kn}
-            className="text-sm px-4 py-2 bg-orange-400 text-white rounded-lg hover:bg-orange-500 disabled:opacity-50 flex items-center gap-2">
-            <i className="ti ti-device-floppy" />
-            {saving ? 'กำลังบันทึก...' : 'บันทึกผล'}
-          </button>
-        </div>
-      </form>
-    </Modal>
-  )
-}
 
 // ── ออกเอกสาร ─────────────────────────────────────────────
 function DocumentModal({ order, onClose, onPrintReport }) {
+  const navigate = useNavigate()
+
   return (
     <Modal title="ออกเอกสาร" onClose={onClose}>
       <div className="px-6 py-5 space-y-3">
@@ -206,13 +114,17 @@ function DocumentModal({ order, onClose, onPrintReport }) {
           <i className="ti ti-chevron-right text-gray-300 ml-auto" />
         </button>
 
-        <div className="w-full flex items-center gap-3 px-4 py-3.5 rounded-xl border border-gray-100 bg-gray-50 text-left opacity-50 cursor-not-allowed">
-          <i className="ti ti-file-plus text-xl text-gray-300" />
+        <button
+          onClick={() => { onClose(); navigate(`/workorders/${order.ref_no}/print-form`) }}
+          className="w-full flex items-center gap-3 px-4 py-3.5 rounded-xl border border-gray-200 bg-gray-50 hover:bg-gray-100 transition-colors text-left"
+        >
+          <i className="ti ti-printer text-xl text-gray-500" />
           <div>
-            <p className="text-sm font-medium text-gray-500">อื่น ๆ</p>
-            <p className="text-xs text-gray-400 mt-0.5">อยู่ระหว่างพัฒนา</p>
+            <p className="text-sm font-medium text-gray-800">พิมพ์แบบฟอร์มเปล่า</p>
+            <p className="text-xs text-gray-400 mt-0.5">สำหรับให้ช่างบันทึกผลที่หน้างาน</p>
           </div>
-        </div>
+          <i className="ti ti-chevron-right text-gray-300 ml-auto" />
+        </button>
       </div>
     </Modal>
   )
@@ -676,7 +588,6 @@ export default function WorkOrderDetailPage() {
   const [newStatus, setNewStatus] = useState('')
   const [savingStatus, setSavingStatus] = useState(false)
 
-  const [showResult, setShowResult] = useState(false)
   const [showDoc, setShowDoc]       = useState(false)
   const [showReport, setShowReport] = useState(false)
   const [creatingSheet, setCreatingSheet] = useState(false)
@@ -697,11 +608,6 @@ export default function WorkOrderDetailPage() {
       setOrder((o) => ({ ...o, status: newStatus }))
     } catch { alert('อัปเดตสถานะไม่สำเร็จ') }
     finally { setSavingStatus(false) }
-  }
-
-  const handleResultSaved = (fields) => {
-    setOrder((o) => ({ ...o, ...fields }))
-    setNewStatus('เสร็จสิ้น')
   }
 
   const handleSyncSheet = async () => {
@@ -771,16 +677,8 @@ export default function WorkOrderDetailPage() {
         {/* Action buttons */}
         <div className="flex items-center gap-2 shrink-0">
           <button onClick={() => setShowDoc(true)}
-            className="flex items-center gap-1.5 text-sm px-3.5 py-2 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
-            <i className="ti ti-file-export text-sm" /> ออกเอกสาร
-          </button>
-          <button onClick={() => setShowResult(true)}
-            className="flex items-center gap-1.5 text-sm px-3.5 py-2 border border-orange-300 text-orange-500 rounded-lg hover:bg-orange-50 transition-colors">
-            <i className="ti ti-clipboard-check text-sm" /> บันทึกผลการทดสอบ
-          </button>
-          <button onClick={() => setShowReport(true)}
             className="flex items-center gap-1.5 text-sm px-3.5 py-2 bg-orange-400 text-white rounded-lg hover:bg-orange-500 transition-colors">
-            <i className="ti ti-chart-bar text-sm" /> รายงานผล
+            <i className="ti ti-file-export text-sm" /> ออกเอกสาร
           </button>
         </div>
       </div>
@@ -902,10 +800,6 @@ export default function WorkOrderDetailPage() {
                   <InfoRow label="หมายเหตุ" value={order.result_notes} />
                 </div>
               )}
-              <button onClick={() => setShowResult(true)}
-                className="text-xs text-orange-400 hover:underline flex items-center gap-1">
-                <i className="ti ti-edit text-xs" /> แก้ไขผลการทดสอบ
-              </button>
             </Section>
           )}
 
@@ -971,9 +865,6 @@ export default function WorkOrderDetailPage() {
       </div>
 
       {/* Modals */}
-      {showResult && (
-        <ResultModal order={order} onClose={() => setShowResult(false)} onSaved={handleResultSaved} />
-      )}
       {showDoc && (
         <DocumentModal order={order} onClose={() => setShowDoc(false)} onPrintReport={() => setShowReport(true)} />
       )}

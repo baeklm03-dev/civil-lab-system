@@ -6,7 +6,6 @@ const navItems = [
   { to: '/dashboard',      icon: 'ti-layout-dashboard', label: 'ภาพรวมระบบ' },
   { to: '/workorders',     icon: 'ti-file-text',        label: 'ใบงานทดสอบ' },
   { to: '/record-results', icon: 'ti-clipboard-check',  label: 'บันทึกผลการทดสอบ' },
-  { to: '/print-form',     icon: 'ti-printer',          label: 'พิมพ์แบบฟอร์ม' },
   { to: '/personnel',      icon: 'ti-users',            label: 'จัดการบุคลากร' },
 ]
 

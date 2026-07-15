@@ -18,94 +18,66 @@ function detectTestType(order) {
 }
 
 const inputCls = 'w-full px-2 py-1.5 text-xs border border-gray-200 rounded focus:outline-none focus:border-orange-400 bg-white'
-const readonlyCls = 'w-full px-2 py-1.5 text-xs border border-orange-200 rounded bg-orange-50 text-orange-700 font-medium'
 
 function mkConcreteRow(specNo) {
   return { specNo: String(specNo), col1: '', col2: '', col3: '', col4: '', col5: '', col6: '', col7: '' }
 }
 function mkSteelRow(specNo) {
-  return { specNo: String(specNo), col1: '', col2: '', col3: '', col4: '', col5: '', col6: '', col7: '', col8: '', col9: '', col10: '' }
+  return { specNo: String(specNo), col1: '', col2: '', col3: '', col4: '', col5: '', col6: '', col7: '' }
 }
 function mkOtherRow(specNo) {
   return { specNo: String(specNo) }
 }
 
-// ── Concrete Table ─────────────────────────────────────────
+// ── Concrete Table (Compression Test) ───────────────────────
+// col1=CASTING DATE, col2-4=DIMENSION 1-3, col5=WEIGHT(kg), col6=ULTIMATE LOAD(kN), col7=REMARK
 function ConcreteTable({ rows, setRows }) {
-  const update = (idx, key, val) => {
-    setRows((rs) => {
-      const next = rs.map((r, i) => i === idx ? { ...r, [key]: val } : r)
-      const row = next[idx]
-      const wt = parseFloat(key === 'col3' ? val : row.col3)
-      const vol = parseFloat(key === 'col2' ? val : row.col2)
-      if (!isNaN(wt) && !isNaN(vol) && vol > 0) row.col4 = (wt * 1000 / vol).toFixed(2)
-      const load = parseFloat(key === 'col5' ? val : row.col5)
-      const area = parseFloat(key === 'col1' ? val : row.col1)
-      if (!isNaN(load) && !isNaN(area) && area > 0) {
-        const mpa = (load * 10 / area).toFixed(2)
-        row.col6 = mpa
-        row.col7 = (parseFloat(mpa) * 10.197).toFixed(0)
-      }
-      return next
-    })
-  }
-  const heads = ['SPEC.NO', 'AREA (cm²)', 'VOLUME (cm³)', 'WEIGHT (kg)', 'DENSITY (gm/cm³)', 'TOTAL LOAD (kN)', 'ULT. STRESS (MPa)', 'REMARKS (ksc)', '']
+  const update = (idx, key, val) => setRows((rs) => rs.map((r, i) => i === idx ? { ...r, [key]: val } : r))
+  const heads = ['SPEC.NO', 'CASTING DATE', 'DIMENSION 1', 'DIMENSION 2', 'DIMENSION 3', 'WEIGHT (KG)', 'ULTIMATE LOAD (KN)', 'REMARK', '']
+  const types = { col1: 'date', col2: 'number', col3: 'number', col4: 'number', col5: 'number', col6: 'number', col7: 'text' }
   const cols = ['col1', 'col2', 'col3', 'col4', 'col5', 'col6', 'col7']
-  const readonly = { col4: true, col6: true, col7: true }
-  return (
-    <table className="w-full text-xs border-collapse">
-      <thead><tr className="bg-gray-100">{heads.map((h) => <th key={h} className="border border-gray-200 px-2 py-1.5 font-medium text-gray-600 whitespace-nowrap">{h}</th>)}</tr></thead>
-      <tbody>
-        {rows.map((row, i) => (
-          <tr key={i}>
-            <td className="border border-gray-200 p-1"><input value={row.specNo} onChange={(e) => update(i, 'specNo', e.target.value)} className={inputCls} /></td>
-            {cols.map((c) => (
-              <td key={c} className="border border-gray-200 p-1">
-                <input type="number" readOnly={readonly[c]} value={row[c]} onChange={(e) => update(i, c, e.target.value)}
-                  className={readonly[c] ? readonlyCls : inputCls} />
-              </td>
-            ))}
-            <td className="border border-gray-200 p-1 text-center">
-              {rows.length > 1 && <button onClick={() => setRows((rs) => rs.filter((_, idx) => idx !== i))} className="text-red-400 hover:text-red-600"><i className="ti ti-trash text-xs" /></button>}
-            </td>
-          </tr>
-        ))}
-      </tbody>
-    </table>
-  )
-}
-
-// ── Steel Table ────────────────────────────────────────────
-function SteelTable({ rows, setRows }) {
-  const update = (idx, key, val) => {
-    setRows((rs) => {
-      const next = rs.map((r, i) => i === idx ? { ...r, [key]: val } : r)
-      const row = next[idx]
-      const area = parseFloat(key === 'col4' ? val : row.col4)
-      if (!isNaN(area) && area > 0) {
-        const yk = parseFloat(key === 'col5' ? val : row.col5)
-        if (!isNaN(yk)) row.col7 = (yk * 10 / area).toFixed(1)
-        const uk = parseFloat(key === 'col6' ? val : row.col6)
-        if (!isNaN(uk)) row.col8 = (uk * 10 / area).toFixed(1)
-      }
-      return next
-    })
-  }
-  const heads = ['SPEC.NO', 'NOM.SIZE (mm)', 'WEIGHT (kg/m)', 'TESTED DIA (mm)', 'NOM.AREA (cm²)', 'LOAD YIELD (kN)', 'LOAD ULT. (kN)', 'STRESS YIELD (MPa)', 'STRESS ULT. (MPa)', 'ELONG. (%)', 'GAUGE LEN. (cm)', '']
-  const cols = ['col1', 'col2', 'col3', 'col4', 'col5', 'col6', 'col7', 'col8', 'col9', 'col10']
-  const readonly = { col7: true, col8: true }
   return (
     <div className="overflow-x-auto">
-      <table className="w-full text-xs border-collapse min-w-[1000px]">
-        <thead><tr className="bg-gray-100">{heads.map((h) => <th key={h} className="border border-gray-200 px-1.5 py-1.5 font-medium text-gray-600 whitespace-nowrap">{h}</th>)}</tr></thead>
+      <table className="w-full text-xs border-collapse">
+        <thead><tr className="bg-gray-100">{heads.map((h) => <th key={h} className="border border-gray-200 px-2 py-1.5 font-medium text-gray-600 whitespace-nowrap">{h}</th>)}</tr></thead>
         <tbody>
           {rows.map((row, i) => (
             <tr key={i}>
               <td className="border border-gray-200 p-1"><input value={row.specNo} onChange={(e) => update(i, 'specNo', e.target.value)} className={inputCls} /></td>
               {cols.map((c) => (
                 <td key={c} className="border border-gray-200 p-1">
-                  <input type={c === 'col1' ? 'text' : 'number'} readOnly={readonly[c]} value={row[c]} onChange={(e) => update(i, c, e.target.value)}
-                    className={readonly[c] ? readonlyCls : inputCls} />
+                  <input type={types[c]} value={row[c]} onChange={(e) => update(i, c, e.target.value)} className={inputCls} />
+                </td>
+              ))}
+              <td className="border border-gray-200 p-1 text-center">
+                {rows.length > 1 && <button onClick={() => setRows((rs) => rs.filter((_, idx) => idx !== i))} className="text-red-400 hover:text-red-600"><i className="ti ti-trash text-xs" /></button>}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
+// ── Steel Table (Tension Test) ──────────────────────────────
+// col1=LENGTH(cm), col2=WEIGHT(g), col3=YIELD(kN), col4=ULTIMATE(kN), col5=ELONGATION(cm), col6=G.L(cm), col7=REMARK
+function SteelTable({ rows, setRows }) {
+  const update = (idx, key, val) => setRows((rs) => rs.map((r, i) => i === idx ? { ...r, [key]: val } : r))
+  const heads = ['SPEC.NO', 'LENGTH (cm)', 'WEIGHT (g)', 'YIELD (kN)', 'ULTIMATE (kN)', 'ELONGATION (cm)', 'G.L (cm)', 'REMARK', '']
+  const types = { col1: 'number', col2: 'number', col3: 'number', col4: 'number', col5: 'number', col6: 'number', col7: 'text' }
+  const cols = ['col1', 'col2', 'col3', 'col4', 'col5', 'col6', 'col7']
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full text-xs border-collapse">
+        <thead><tr className="bg-gray-100">{heads.map((h) => <th key={h} className="border border-gray-200 px-2 py-1.5 font-medium text-gray-600 whitespace-nowrap">{h}</th>)}</tr></thead>
+        <tbody>
+          {rows.map((row, i) => (
+            <tr key={i}>
+              <td className="border border-gray-200 p-1"><input value={row.specNo} onChange={(e) => update(i, 'specNo', e.target.value)} className={inputCls} /></td>
+              {cols.map((c) => (
+                <td key={c} className="border border-gray-200 p-1">
+                  <input type={types[c]} value={row[c]} onChange={(e) => update(i, c, e.target.value)} className={inputCls} />
                 </td>
               ))}
               <td className="border border-gray-200 p-1 text-center">
