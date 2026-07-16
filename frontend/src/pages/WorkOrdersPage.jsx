@@ -135,7 +135,7 @@ const TEST_TYPES = [
 
 function CreateModal({ onClose, onCreated, nextSeq }) {
   const [form, setForm] = useState({
-    project_name: '', contractor: '', sample_type: 'Cube',
+    project_name: '', contractor: '', sample_type: '',
     sample_type_other: '', notes: '', professor: '',
     test_type: 'concrete', custom_test_name: '',
   })
@@ -226,23 +226,6 @@ function CreateModal({ onClose, onCreated, nextSeq }) {
             </div>
 
             <div className="flex flex-col gap-1.5">
-              <label className="text-sm text-gray-700">ประเภทตัวอย่าง <span className="text-red-400">*</span></label>
-              <select value={form.sample_type} onChange={set('sample_type')}
-                className="px-3 py-2.5 rounded-lg border border-gray-200 text-sm focus:outline-none focus:border-orange-400 bg-gray-50">
-                {['Cube', 'Coring', 'Cylinder', 'Cylinder Cap', 'Other'].map((t) => <option key={t}>{t}</option>)}
-              </select>
-              {form.sample_type === 'Other' && (
-                <input
-                  value={form.sample_type_other}
-                  onChange={set('sample_type_other')}
-                  placeholder="ระบุประเภทตัวอย่าง..."
-                  autoFocus
-                  className="px-3 py-2.5 rounded-lg border border-orange-300 text-sm focus:outline-none focus:border-orange-400 bg-orange-50"
-                />
-              )}
-            </div>
-
-            <div className="flex flex-col gap-1.5">
               <label className="text-sm text-gray-700">ประเภทการทดสอบ <span className="text-red-400">*</span></label>
               <div className="flex gap-2">
                 {TEST_TYPES.map(({ v, label }) => (
@@ -261,6 +244,27 @@ function CreateModal({ onClose, onCreated, nextSeq }) {
                   </button>
                 ))}
               </div>
+
+              {form.test_type === 'concrete' && (
+                <div className="flex flex-col gap-1.5 pt-2">
+                  <label className="text-sm text-gray-700">ประเภทตัวอย่าง <span className="text-xs text-gray-400">(ไม่บังคับ — จะกรอกทีหลังก็ได้)</span></label>
+                  <select value={form.sample_type} onChange={set('sample_type')}
+                    className="px-3 py-2.5 rounded-lg border border-gray-200 text-sm focus:outline-none focus:border-orange-400 bg-gray-50">
+                    <option value="">ยังไม่ระบุ</option>
+                    {['Cube', 'Coring', 'Cylinder', 'Cylinder Cap', 'Other'].map((t) => <option key={t}>{t}</option>)}
+                  </select>
+                  {form.sample_type === 'Other' && (
+                    <input
+                      value={form.sample_type_other}
+                      onChange={set('sample_type_other')}
+                      placeholder="ระบุประเภทตัวอย่าง..."
+                      autoFocus
+                      className="px-3 py-2.5 rounded-lg border border-orange-300 text-sm focus:outline-none focus:border-orange-400 bg-orange-50"
+                    />
+                  )}
+                </div>
+              )}
+
               {form.test_type === 'other' && (
                 <div className="space-y-3 pt-1">
                   <input

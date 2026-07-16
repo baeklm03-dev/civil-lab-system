@@ -245,9 +245,6 @@ router.post('/', authMiddleware, async (req, res) => {
       test_type, custom_test_name, selected_announcements, custom_columns, custom_header_fields,
     } = req.body;
 
-    if (!sample_type) {
-      return res.status(400).json({ success: false, message: 'กรุณาระบุประเภทตัวอย่าง' });
-    }
 
     const allOrders = await getAllOrders();
     const ref_no = await generateRefNo(allOrders);
@@ -256,7 +253,7 @@ router.post('/', authMiddleware, async (req, res) => {
     const created_by = req.user.name;
 
     const record = {
-      ref_no, project_name, contractor, sample_type,
+      ref_no, project_name, contractor, sample_type: sample_type || '',
       sample_count: sample_count || '',
       test_age_days: test_age_days || '',
       received_date, status: 'รับเรื่อง',

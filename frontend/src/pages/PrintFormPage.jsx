@@ -84,7 +84,7 @@ function Checkbox({ checked, label }) {
 }
 
 function CompressionForm({ order }) {
-  const rows = Array.from({ length: 20 })
+  const rows = Array.from({ length: 15 })
   const shape = (order.sample_type || '').toLowerCase()
   const isCube = shape === 'cube'
   const isCylinder = shape === 'cylinder' || shape === 'cylinder cap'
@@ -125,7 +125,7 @@ function CompressionForm({ order }) {
 }
 
 function TensionForm({ order }) {
-  const rows = Array.from({ length: 20 })
+  const rows = Array.from({ length: 15 })
   const { type, size } = detectBarType(order)
 
   return (
@@ -159,7 +159,7 @@ function TensionForm({ order }) {
 }
 
 function OtherForm({ order, columns, setColumns, headerFields, setHeaderFields, title, setTitle, onSave }) {
-  const rows = Array.from({ length: 20 })
+  const rows = Array.from({ length: 15 })
   const updateColumn = (idx, key, val) => setColumns((cols) => cols.map((c, i) => i === idx ? { ...c, [key]: val } : c))
   const updateHeaderField = (idx, val) => setHeaderFields((fs) => fs.map((f, i) => i === idx ? val : f))
 
