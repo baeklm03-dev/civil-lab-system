@@ -103,13 +103,13 @@ function DocumentModal({ order, onClose, onPrintReport }) {
     <Modal title="ออกเอกสาร" onClose={onClose}>
       <div className="px-6 py-5 space-y-3">
         <button
-          onClick={() => { onClose(); onPrintReport() }}
-          className="w-full flex items-center gap-3 px-4 py-3.5 rounded-xl border border-orange-200 bg-orange-50 hover:bg-orange-100 transition-colors text-left"
+          onClick={() => { onClose(); navigate(`/workorders/${order.ref_no}/print-form`) }}
+          className="w-full flex items-center gap-3 px-4 py-3.5 rounded-xl border border-gray-200 bg-gray-50 hover:bg-gray-100 transition-colors text-left"
         >
-          <i className="ti ti-file-description text-xl text-orange-400" />
+          <i className="ti ti-printer text-xl text-gray-500" />
           <div>
-            <p className="text-sm font-medium text-gray-800">ใบรายงานผลการทดสอบ</p>
-            <p className="text-xs text-gray-400 mt-0.5">พิมพ์หรือ Export เป็น PDF</p>
+            <p className="text-sm font-medium text-gray-800">แบบฟอร์มสำหรับบันทึกผล</p>
+            <p className="text-xs text-gray-400 mt-0.5">แบบฟอร์มเปล่าสำหรับบันทึกผลด้วยลายมือ</p>
           </div>
           <i className="ti ti-chevron-right text-gray-300 ml-auto" />
         </button>
@@ -122,6 +122,18 @@ function DocumentModal({ order, onClose, onPrintReport }) {
           <div>
             <p className="text-sm font-medium text-gray-800">บันทึกผลการทดสอบ</p>
             <p className="text-xs text-gray-400 mt-0.5">กรอกผลทดสอบ เพิ่มแถวได้ บันทึกและสร้าง PDF ได้ทันที</p>
+          </div>
+          <i className="ti ti-chevron-right text-gray-300 ml-auto" />
+        </button>
+
+        <button
+          onClick={() => { onClose(); onPrintReport() }}
+          className="w-full flex items-center gap-3 px-4 py-3.5 rounded-xl border border-orange-200 bg-orange-50 hover:bg-orange-100 transition-colors text-left"
+        >
+          <i className="ti ti-file-description text-xl text-orange-400" />
+          <div>
+            <p className="text-sm font-medium text-gray-800">ใบรายงานผลการทดสอบ</p>
+            <p className="text-xs text-gray-400 mt-0.5">พิมพ์หรือ Export เป็น PDF</p>
           </div>
           <i className="ti ti-chevron-right text-gray-300 ml-auto" />
         </button>

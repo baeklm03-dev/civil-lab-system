@@ -58,6 +58,7 @@ export const personnelAPI = {
 // Reports
 export const reportAPI = {
   generate: (data) => api.post('/reports/generate', data, { responseType: 'arraybuffer' }),
+  generateFromHtml: (html, filename) => api.post('/reports/export-html', { html, filename }, { responseType: 'arraybuffer' }),
 }
 
 // Export

@@ -77,4 +77,43 @@ router.post('/generate', authMiddleware, async (req, res) => {
   }
 });
 
+// POST /api/reports/export-html — สร้าง PDF จาก HTML ดิบ (ใช้กับแบบฟอร์มเปล่าสำหรับบันทึกผลด้วยลายมือ)
+router.post('/export-html', authMiddleware, async (req, res) => {
+  const { html, filename } = req.body;
+  if (!html) {
+    return res.status(400).json({ success: false, message: 'ไม่มีเนื้อหาสำหรับสร้าง PDF' });
+  }
+
+  let puppeteer;
+  try {
+    puppeteer = require('puppeteer');
+  } catch {
+    return res.status(500).json({ success: false, message: 'puppeteer ยังไม่ได้ติดตั้ง — รัน: npm install puppeteer' });
+  }
+
+  let browser;
+  try {
+    browser = await puppeteer.launch({
+      headless: true,
+      args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-gpu'],
+    });
+    const page = await browser.newPage();
+    await page.setContent(html, { waitUntil: 'networkidle0' });
+    const pdf = await page.pdf({ format: 'A4', printBackground: true });
+
+    res.set({
+      'Content-Type': 'application/pdf',
+      'Content-Disposition': `attachment; filename="${filename || 'document'}.pdf"`,
+      'Content-Length': pdf.length,
+    });
+    res.send(Buffer.from(pdf));
+    await logActivity(req.user.id, req.user.username, 'GENERATE_PDF', filename || 'document', req.ip);
+  } catch (err) {
+    console.error('PDF export-html error:', err);
+    res.status(500).json({ success: false, message: 'เกิดข้อผิดพลาดในการสร้าง PDF: ' + err.message });
+  } finally {
+    if (browser) await browser.close().catch(() => {});
+  }
+});
+
 module.exports = router;

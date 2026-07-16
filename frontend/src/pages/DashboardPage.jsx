@@ -182,9 +182,9 @@ export default function DashboardPage() {
           <span className="text-xs text-gray-400">วันที่ {dateStr} — อัปเดตล่าสุด {timeStr} น.</span>
           <button
             onClick={() => setShowExport(true)}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-orange-500 hover:bg-orange-600 text-white transition-colors"
+            className="flex items-center gap-1.5 text-sm px-3.5 py-2 bg-orange-400 text-white rounded-lg hover:bg-orange-500 transition-colors"
           >
-            <i className="ti ti-download" /> ⬇ Export
+            <i className="ti ti-file-export text-sm" /> นำออกเอกสาร
           </button>
         </div>
       </div>

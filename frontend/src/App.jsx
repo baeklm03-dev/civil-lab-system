@@ -7,6 +7,7 @@ import WorkOrdersPage from './pages/WorkOrdersPage'
 import WorkOrderDetailPage from './pages/WorkOrderDetailPage'
 import PersonnelPage from './pages/PersonnelPage'
 import RecordResultsPage from './pages/RecordResultsPage'
+import PrintFormPage from './pages/PrintFormPage'
 import AdminUsersPage from './pages/admin/AdminUsersPage'
 import AdminLogsPage from './pages/admin/AdminLogsPage'
 import AdminAnnouncementsPage from './pages/admin/AdminAnnouncementsPage'
@@ -47,6 +48,7 @@ export default function App() {
             <Route path="workorders/:refNo" element={<WorkOrderDetailPage />} />
             <Route path="personnel"  element={<PersonnelPage />} />
             <Route path="workorders/:refNo/record-results" element={<RecordResultsPage />} />
+            <Route path="workorders/:refNo/print-form" element={<PrintFormPage />} />
             <Route path="admin/users" element={<RoleRoute roles={['superadmin']}><AdminUsersPage /></RoleRoute>} />
             <Route path="admin/logs" element={<RoleRoute roles={['superadmin']}><AdminLogsPage /></RoleRoute>} />
             <Route path="admin/announcements" element={<RoleRoute roles={['admin', 'superadmin']}><AdminAnnouncementsPage /></RoleRoute>} />
