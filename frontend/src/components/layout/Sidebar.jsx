@@ -5,7 +5,6 @@ import logo from '../../logo.png'
 const navItems = [
   { to: '/dashboard',      icon: 'ti-layout-dashboard', label: 'ภาพรวมระบบ' },
   { to: '/workorders',     icon: 'ti-file-text',        label: 'ใบงานทดสอบ' },
-  { to: '/record-results', icon: 'ti-clipboard-check',  label: 'บันทึกผลการทดสอบ' },
   { to: '/personnel',      icon: 'ti-users',            label: 'จัดการบุคลากร' },
 ]
 

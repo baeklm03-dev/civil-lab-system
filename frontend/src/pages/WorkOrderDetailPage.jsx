@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { workorderAPI, personnelAPI, reportAPI } from '../services/api'
+import { workorderAPI, personnelAPI, reportAPI, resultsAPI } from '../services/api'
 import { useToast } from '../hooks/useToast'
 import logo from '../logo.png'
 
@@ -115,13 +115,13 @@ function DocumentModal({ order, onClose, onPrintReport }) {
         </button>
 
         <button
-          onClick={() => { onClose(); navigate(`/workorders/${order.ref_no}/print-form`) }}
+          onClick={() => { onClose(); navigate(`/workorders/${order.ref_no}/record-results`) }}
           className="w-full flex items-center gap-3 px-4 py-3.5 rounded-xl border border-gray-200 bg-gray-50 hover:bg-gray-100 transition-colors text-left"
         >
-          <i className="ti ti-printer text-xl text-gray-500" />
+          <i className="ti ti-clipboard-check text-xl text-gray-500" />
           <div>
-            <p className="text-sm font-medium text-gray-800">พิมพ์แบบฟอร์มเปล่า</p>
-            <p className="text-xs text-gray-400 mt-0.5">สำหรับให้ช่างบันทึกผลที่หน้างาน</p>
+            <p className="text-sm font-medium text-gray-800">บันทึกผลการทดสอบ</p>
+            <p className="text-xs text-gray-400 mt-0.5">กรอกผลทดสอบ เพิ่มแถวได้ บันทึกและสร้าง PDF ได้ทันที</p>
           </div>
           <i className="ti ti-chevron-right text-gray-300 ml-auto" />
         </button>
@@ -258,6 +258,40 @@ function ReportModal({ order, onClose }) {
       .then(({ data }) => setTesters(data.data || []))
       .catch(() => {})
       .finally(() => setLoadingTesters(false))
+  }, [])
+
+  // ดึงผลที่บันทึกไว้แล้วจากหน้า "บันทึกผลการทดสอบ" มาเติมให้อัตโนมัติ (ถ้ามี) แทนแถวว่างเริ่มต้น
+  useEffect(() => {
+    resultsAPI.getAll({ workOrderId: order.ref_no }).then(({ data }) => {
+      const saved = data.data || []
+      const concreteSaved = saved.filter((r) => r.testType === 'concrete')
+      const steelSaved = saved.filter((r) => r.testType === 'steel')
+
+      if (concreteSaved.length) {
+        setCompRows(concreteSaved.map((r) => mkCompRow({
+          spec_no: r.specNo, area_cm2: r.col8 || '', volume_cm3: r.col9 || '',
+          weight_kg: r.col5 || '', density: r.col10 || '', load_kn: r.col6 || '',
+          ultimate_stress: r.col11 || '', ksc: r.col11 ? (parseFloat(r.col11) * 10.197).toFixed(0) : '',
+        })))
+      }
+      if (steelSaved.length) {
+        setTensionRows(steelSaved.map((r) => {
+          const area = parseFloat(r.col9)
+          const elong = (r.col6 && r.col7) ? ((parseFloat(r.col6) / parseFloat(r.col7)) * 100).toFixed(1) : ''
+          return mkTensionRow({
+            spec_no: r.specNo, nominal_size: r.col1 || '',
+            weight_kg_m: !isNaN(area) ? (area * 0.785).toFixed(3) : '',
+            tested_dia: (String(r.col1 || '').match(/(\d+(\.\d+)?)/) || [])[1] || '',
+            nominal_area: r.col9 || '', yield_kn: r.col4 || '', ultimate_kn: r.col5 || '',
+            yield_mpa: r.col10 || '', ultimate_mpa: r.col11 || '', elongation_pct: elong, gauge_length: r.col7 || '',
+          })
+        }))
+      }
+      // สลับแท็บให้ตรงกับข้อมูลที่บันทึกไว้จริง ถ้ามีแค่ประเภทเดียว (กัน sample_type เดาผิดตอน detectReportType)
+      if (steelSaved.length && !concreteSaved.length) setReportType('tension')
+      else if (concreteSaved.length && !steelSaved.length) setReportType('compression')
+    }).catch(() => {})
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   const handlePasteComp = (mapped) => {
