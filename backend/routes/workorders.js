@@ -139,7 +139,7 @@ router.get('/stats', authMiddleware, async (req, res) => {
 // ── GET /api/workorders ───────────────────────────────────
 router.get('/', authMiddleware, async (req, res) => {
   try {
-    const { status, search, page = 1, limit = 20, startDate, endDate, testType } = req.query;
+    const { status, search, page = 1, limit = 15, startDate, endDate, testType } = req.query;
     let orders = await getAllOrders();
 
     orders = filterByDateRange(orders, startDate, endDate);
@@ -153,6 +153,9 @@ router.get('/', authMiddleware, async (req, res) => {
                o.contractor?.toLowerCase().includes(q)
       );
     }
+
+    // ล่าสุดขึ้นก่อน
+    orders = [...orders].sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
 
     const total = orders.length;
     const start = (Number(page) - 1) * Number(limit);

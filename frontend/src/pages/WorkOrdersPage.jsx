@@ -194,8 +194,8 @@ function CreateModal({ onClose, onCreated, nextSeq }) {
 
   return (
     <div className="fixed inset-0 bg-black/30 z-40 flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl w-full max-w-md shadow-lg">
-        <div className="px-6 py-4 border-b border-gray-100 flex items-start justify-between">
+      <div className="bg-white rounded-2xl w-full max-w-md shadow-lg max-h-[90vh] flex flex-col">
+        <div className="px-6 py-4 border-b border-gray-100 flex items-start justify-between shrink-0">
           <div>
             <h2 className="text-base font-medium text-gray-800">สร้างใบงานทดสอบใหม่</h2>
             <p className="text-xs text-gray-400 mt-0.5">
@@ -208,8 +208,8 @@ function CreateModal({ onClose, onCreated, nextSeq }) {
           </button>
         </div>
 
-        <form onSubmit={handleSubmit}>
-          <div className="px-6 py-5 space-y-4">
+        <form onSubmit={handleSubmit} className="flex flex-col min-h-0 flex-1">
+          <div className="px-6 py-5 space-y-4 overflow-y-auto min-h-0 flex-1">
 
             <div className="flex flex-col gap-1.5">
               <label className="text-sm text-gray-700">ผู้รับเหมา / หน่วยงาน <span className="text-xs text-gray-400">(ไม่บังคับ — รอลูกค้ากรอกใน Sheet)</span></label>
@@ -339,7 +339,7 @@ function CreateModal({ onClose, onCreated, nextSeq }) {
             {error && <p className="text-sm text-red-600 bg-red-50 px-3 py-2 rounded-lg">{error}</p>}
           </div>
 
-          <div className="px-6 py-4 border-t border-gray-100 flex justify-end gap-2">
+          <div className="px-6 py-4 border-t border-gray-100 flex justify-end gap-2 shrink-0">
             <button type="button" onClick={onClose}
               className="text-sm px-4 py-2 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
               ยกเลิก
@@ -368,7 +368,7 @@ export default function WorkOrdersPage() {
   const [showImport, setShowImport] = useState(false)
   const [searchParams] = useSearchParams()
   const navigate = useNavigate()
-  const LIMIT = 20
+  const LIMIT = 15
 
   const fetchOrders = useCallback(async () => {
     setLoading(true)
