@@ -11,15 +11,13 @@ import PrintFormPage from './pages/PrintFormPage'
 import AdminUsersPage from './pages/admin/AdminUsersPage'
 import AdminLogsPage from './pages/admin/AdminLogsPage'
 import AdminAnnouncementsPage from './pages/admin/AdminAnnouncementsPage'
+import AdminWorkorderTemplatesPage from './pages/admin/AdminWorkorderTemplatesPage'
+import Loader from './components/ui/Loader'
 
 function ProtectedRoute({ children }) {
   const { user, loading } = useAuth()
   if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <i className="ti ti-loader-2 animate-spin text-orange-400 text-2xl" />
-      </div>
-    )
+    return <Loader fullScreen />
   }
   return user ? children : <Navigate to="/login" replace />
 }
@@ -52,6 +50,7 @@ export default function App() {
             <Route path="admin/users" element={<RoleRoute roles={['superadmin']}><AdminUsersPage /></RoleRoute>} />
             <Route path="admin/logs" element={<RoleRoute roles={['superadmin']}><AdminLogsPage /></RoleRoute>} />
             <Route path="admin/announcements" element={<RoleRoute roles={['admin', 'superadmin']}><AdminAnnouncementsPage /></RoleRoute>} />
+            <Route path="admin/workorder-templates" element={<RoleRoute roles={['admin', 'superadmin']}><AdminWorkorderTemplatesPage /></RoleRoute>} />
           </Route>
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

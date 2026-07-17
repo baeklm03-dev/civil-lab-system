@@ -13,49 +13,40 @@ function genRefPreview(seq) {
   return `${yy}${mm}${dd}${String(seq).padStart(2, '0')}`
 }
 
-// ── Import Modal ──
-const IMPORT_COLS  = ['contractor', 'project_name', 'sample_type', 'sample_count', 'test_age_days', 'received_date', 'notes']
-const IMPORT_HEADS = ['ผู้รับเหมา', 'ชื่อโครงการ', 'ประเภทตัวอย่าง', 'จำนวน', 'อายุทดสอบ (วัน)', 'วันที่รับ (YYYY-MM-DD)', 'หมายเหตุ']
-
+// ── Import Modal ── นำเข้าใบงานประเภท "อื่นๆ" จากไฟล์ Excel หรือลิงก์ Google Sheet ที่ลูกค้าจัดทำเอง
+// ระบบแค่อ่านข้อมูล (แถวแรก = หัวคอลัมน์) แล้วเก็บไว้อ้างอิงในใบงานใหม่ ไม่ผูกกับสูตรคำนวณใดๆ
 function ImportModal({ onClose, onImported }) {
-  const [raw, setRaw] = useState('')
-  const [preview, setPreview] = useState([])
+  const [mode, setMode] = useState('file') // 'file' | 'link'
+  const [file, setFile] = useState(null)
+  const [sheetUrl, setSheetUrl] = useState('')
+  const [projectName, setProjectName] = useState('')
+  const [contractor, setContractor] = useState('')
+  const [customTestName, setCustomTestName] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
-  const parse = (text) => {
-    const rows = text.trim().split(/\r?\n/)
-      .map((r) => r.split('\t').map((c) => c.trim()))
-      .filter((r) => r.some((c) => c !== ''))
-    // ข้ามแถวหัวตาราง ถ้าคอลัมน์ "จำนวน" ไม่ใช่ตัวเลข
-    const start = (rows.length > 0 && rows[0][3] && isNaN(Number(rows[0][3]))) ? 1 : 0
-    return rows.slice(start)
-  }
-
-  const handleChange = (text) => {
-    setRaw(text)
-    setError('')
-    setPreview(parse(text).slice(0, 8))
-  }
+  const canSubmit = mode === 'file' ? !!file : sheetUrl.trim().length > 0
 
   const handleSubmit = async () => {
     setError('')
-    const rows = parse(raw)
-    if (!rows.length) { setError('ไม่พบข้อมูลที่จะนำเข้า'); return }
-
-    const workOrders = rows.map((cells) => {
-      const obj = {}
-      IMPORT_COLS.forEach((key, ci) => { obj[key] = cells[ci] ?? '' })
-      return obj
-    })
-
-    const invalid = workOrders.some((w) => !w.project_name || !w.contractor || !w.sample_type)
-    if (invalid) { setError('ทุกแถวต้องมีผู้รับเหมา ชื่อโครงการ และประเภทตัวอย่าง'); return }
+    if (!canSubmit) { setError(mode === 'file' ? 'กรุณาเลือกไฟล์ Excel' : 'กรุณาวางลิงก์ Google Sheet'); return }
 
     setLoading(true)
     try {
-      const { data } = await workorderAPI.importOrders(workOrders)
-      onImported(data.data?.length || workOrders.length)
+      let data
+      if (mode === 'file') {
+        const formData = new FormData()
+        formData.append('file', file)
+        formData.append('project_name', projectName)
+        formData.append('contractor', contractor)
+        formData.append('custom_test_name', customTestName)
+        ;({ data } = await workorderAPI.importFile(formData))
+      } else {
+        ;({ data } = await workorderAPI.importSheetLink({
+          url: sheetUrl.trim(), project_name: projectName, contractor, custom_test_name: customTestName,
+        }))
+      }
+      onImported(data.data)
     } catch (err) {
       setError(err.response?.data?.message || 'นำเข้าไม่สำเร็จ')
     } finally { setLoading(false) }
@@ -63,62 +54,79 @@ function ImportModal({ onClose, onImported }) {
 
   return (
     <div className="fixed inset-0 bg-black/30 z-40 flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl w-full max-w-2xl shadow-lg">
-        <div className="px-6 py-4 border-b border-gray-100 flex items-start justify-between">
+      <div className="bg-white rounded-2xl w-full max-w-md shadow-lg max-h-[90vh] flex flex-col">
+        <div className="px-6 py-4 border-b border-gray-100 flex items-start justify-between shrink-0">
           <div>
-            <h2 className="text-base font-medium text-gray-800">นำเข้าใบงาน</h2>
-            <p className="text-xs text-gray-400 mt-0.5">
-              คัดลอกคอลัมน์จาก Excel ตามลำดับ:&nbsp;
-              <span className="text-orange-500 font-medium">{IMPORT_HEADS.join(' → ')}</span>
-            </p>
+            <h2 className="text-base font-medium text-gray-800">นำเข้าใบงาน (อื่นๆ)</h2>
+            <p className="text-xs text-gray-400 mt-0.5">อ่านข้อมูลจากไฟล์/ชีทที่ลูกค้าจัดทำเอง เก็บไว้อ้างอิงในใบงานใหม่</p>
           </div>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600 p-1 mt-0.5">
             <i className="ti ti-x text-lg" />
           </button>
         </div>
 
-        <div className="px-6 py-5 space-y-3">
-          <textarea
-            autoFocus
-            value={raw}
-            onChange={(e) => handleChange(e.target.value)}
-            onPaste={(e) => { e.preventDefault(); handleChange(e.clipboardData.getData('text')) }}
-            rows={6}
-            placeholder="วางข้อมูลจาก Excel ที่นี่ (Ctrl+V)..."
-            className="w-full px-3 py-2.5 text-xs border border-gray-200 rounded-lg bg-gray-50 focus:outline-none focus:border-orange-400 font-mono resize-none"
-          />
+        <div className="px-6 py-5 space-y-4 overflow-y-auto min-h-0 flex-1">
+          <div className="flex gap-2">
+            {[{ v: 'file', label: 'อัปโหลดไฟล์ Excel' }, { v: 'link', label: 'วางลิงก์ Google Sheet' }].map(({ v, label }) => (
+              <button key={v} type="button" onClick={() => setMode(v)}
+                className={`flex-1 px-3 py-2 rounded-lg border text-sm transition-colors ${
+                  mode === v ? 'border-orange-400 bg-orange-50 text-orange-600 font-medium' : 'border-gray-200 text-gray-500 hover:border-gray-300'
+                }`}>
+                {label}
+              </button>
+            ))}
+          </div>
 
-          {preview.length > 0 && (
-            <div className="overflow-x-auto border border-gray-100 rounded-lg">
-              <table className="text-xs border-collapse w-full">
-                <thead>
-                  <tr className="bg-gray-50">
-                    {IMPORT_HEADS.map((h) => <th key={h} className="px-2 py-1.5 text-left text-gray-400 font-medium whitespace-nowrap">{h}</th>)}
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-50">
-                  {preview.map((cells, ri) => (
-                    <tr key={ri}>
-                      {IMPORT_COLS.map((_, ci) => <td key={ci} className="px-2 py-1.5 text-gray-600 whitespace-nowrap">{cells[ci] || '—'}</td>)}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+          {mode === 'file' ? (
+            <div className="flex flex-col gap-1.5">
+              <label className="text-sm text-gray-700">ไฟล์ Excel (.xlsx)</label>
+              <input type="file" accept=".xlsx"
+                onChange={(e) => setFile(e.target.files?.[0] || null)}
+                className="w-full text-sm text-gray-600 file:mr-3 file:px-3 file:py-2 file:rounded-lg file:border-0 file:bg-orange-50 file:text-orange-600 file:text-sm" />
+            </div>
+          ) : (
+            <div className="flex flex-col gap-1.5">
+              <label className="text-sm text-gray-700">ลิงก์ Google Sheet</label>
+              <input value={sheetUrl} onChange={(e) => setSheetUrl(e.target.value)}
+                placeholder="https://docs.google.com/spreadsheets/d/..."
+                className="px-3 py-2.5 rounded-lg border border-gray-200 text-sm focus:outline-none focus:border-orange-400 bg-gray-50" />
+              <p className="text-xs text-gray-400">ต้องแชร์สิทธิ์เข้าถึงให้บัญชี Google ที่เชื่อมต่อระบบนี้ไว้ก่อน</p>
             </div>
           )}
+
+          <div className="flex flex-col gap-1.5">
+            <label className="text-sm text-gray-700">ชื่อโครงการ <span className="text-xs text-gray-400">(ไม่บังคับ)</span></label>
+            <input value={projectName} onChange={(e) => setProjectName(e.target.value)}
+              placeholder="เช่น โครงการก่อสร้างอาคาร B"
+              className="px-3 py-2.5 rounded-lg border border-gray-200 text-sm focus:outline-none focus:border-orange-400 bg-gray-50" />
+          </div>
+
+          <div className="flex flex-col gap-1.5">
+            <label className="text-sm text-gray-700">ผู้รับเหมา / หน่วยงาน <span className="text-xs text-gray-400">(ไม่บังคับ)</span></label>
+            <input value={contractor} onChange={(e) => setContractor(e.target.value)}
+              placeholder="ชื่อบริษัท / หน่วยงาน"
+              className="px-3 py-2.5 rounded-lg border border-gray-200 text-sm focus:outline-none focus:border-orange-400 bg-gray-50" />
+          </div>
+
+          <div className="flex flex-col gap-1.5">
+            <label className="text-sm text-gray-700">ชื่อประเภทการทดสอบ <span className="text-xs text-gray-400">(ไม่บังคับ)</span></label>
+            <input value={customTestName} onChange={(e) => setCustomTestName(e.target.value)}
+              placeholder="เช่น ทดสอบแรงดัดคอนกรีต"
+              className="px-3 py-2.5 rounded-lg border border-gray-200 text-sm focus:outline-none focus:border-orange-400 bg-gray-50" />
+          </div>
 
           {error && <p className="text-sm text-red-600 bg-red-50 px-3 py-2 rounded-lg">{error}</p>}
         </div>
 
-        <div className="px-6 py-4 border-t border-gray-100 flex justify-end gap-2">
+        <div className="px-6 py-4 border-t border-gray-100 flex justify-end gap-2 shrink-0">
           <button onClick={onClose}
             className="text-sm px-4 py-2 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
             ยกเลิก
           </button>
-          <button onClick={handleSubmit} disabled={loading || !preview.length}
+          <button onClick={handleSubmit} disabled={loading || !canSubmit}
             className="text-sm px-4 py-2 bg-orange-400 text-white rounded-lg hover:bg-orange-500 disabled:opacity-60 transition-colors flex items-center gap-2">
             <i className="ti ti-upload" />
-            {loading ? 'กำลังนำเข้า...' : `นำเข้า ${preview.length ? parse(raw).length : ''} รายการ`}
+            {loading ? 'กำลังนำเข้า...' : 'นำเข้า'}
           </button>
         </div>
       </div>
@@ -130,16 +138,14 @@ function ImportModal({ onClose, onImported }) {
 const TEST_TYPES = [
   { v: 'concrete', label: 'คอนกรีต' },
   { v: 'steel', label: 'เหล็กเส้น' },
-  { v: 'other', label: 'อื่นๆ' },
 ]
 
 function CreateModal({ onClose, onCreated, nextSeq }) {
   const [form, setForm] = useState({
     project_name: '', contractor: '', sample_type: '',
     sample_type_other: '', notes: '', professor: '',
-    test_type: 'concrete', custom_test_name: '',
+    test_type: 'concrete',
   })
-  const [customColumns, setCustomColumns] = useState([{ name: '', unit: '' }])
   const [announcements, setAnnouncements] = useState([])
   const [selectedAnnouncements, setSelectedAnnouncements] = useState([])
   const [loading, setLoading] = useState(false)
@@ -161,18 +167,11 @@ function CreateModal({ onClose, onCreated, nextSeq }) {
     setSelectedAnnouncements((sel) => sel.includes(id) ? sel.filter((x) => x !== id) : [...sel, id])
   }
 
-  const updateColumn = (idx, key, val) => {
-    setCustomColumns((cols) => cols.map((c, i) => i === idx ? { ...c, [key]: val } : c))
-  }
-
   const handleSubmit = async (e) => {
     e.preventDefault()
     setError('')
     if (form.sample_type === 'Other' && !form.sample_type_other.trim()) {
       setError('กรุณาระบุประเภทตัวอย่าง'); return
-    }
-    if (form.test_type === 'other' && !form.custom_test_name.trim()) {
-      setError('กรุณาระบุชื่อประเภทการทดสอบ'); return
     }
     setLoading(true)
     try {
@@ -180,9 +179,6 @@ function CreateModal({ onClose, onCreated, nextSeq }) {
         ...form,
         sample_type: form.sample_type === 'Other' ? form.sample_type_other.trim() : form.sample_type,
         selected_announcements: selectedAnnouncements.join(','),
-        custom_columns: form.test_type === 'other'
-          ? customColumns.filter((c) => c.name.trim())
-          : [],
       }
       delete payload.sample_type_other
       const { data } = await workorderAPI.create(payload)
@@ -265,36 +261,6 @@ function CreateModal({ onClose, onCreated, nextSeq }) {
                 </div>
               )}
 
-              {form.test_type === 'other' && (
-                <div className="space-y-3 pt-1">
-                  <input
-                    value={form.custom_test_name}
-                    onChange={set('custom_test_name')}
-                    placeholder="ระบุชื่อประเภทการทดสอบ..."
-                    autoFocus
-                    className="w-full px-3 py-2.5 rounded-lg border border-orange-300 text-sm focus:outline-none focus:border-orange-400 bg-orange-50"
-                  />
-                  <div className="border border-gray-200 rounded-lg p-3 space-y-2">
-                    <p className="text-xs text-gray-500">คอลัมน์ผลทดสอบ (ชื่อ + หน่วย)</p>
-                    {customColumns.map((col, i) => (
-                      <div key={i} className="flex gap-2">
-                        <input value={col.name} onChange={(e) => updateColumn(i, 'name', e.target.value)}
-                          placeholder="ชื่อคอลัมน์" className="flex-1 px-2.5 py-1.5 text-xs border border-gray-200 rounded-lg bg-white focus:outline-none focus:border-orange-400" />
-                        <input value={col.unit} onChange={(e) => updateColumn(i, 'unit', e.target.value)}
-                          placeholder="หน่วย" className="w-20 px-2.5 py-1.5 text-xs border border-gray-200 rounded-lg bg-white focus:outline-none focus:border-orange-400" />
-                        {customColumns.length > 1 && (
-                          <button type="button" onClick={() => setCustomColumns((cols) => cols.filter((_, idx) => idx !== i))}
-                            className="text-red-400 hover:text-red-600 px-1"><i className="ti ti-trash text-xs" /></button>
-                        )}
-                      </div>
-                    ))}
-                    <button type="button" onClick={() => setCustomColumns((cols) => [...cols, { name: '', unit: '' }])}
-                      className="text-xs text-orange-400 hover:underline flex items-center gap-1">
-                      <i className="ti ti-plus text-xs" /> เพิ่มคอลัมน์
-                    </button>
-                  </div>
-                </div>
-              )}
             </div>
 
             {announcements.length > 0 && (
@@ -398,9 +364,9 @@ export default function WorkOrdersPage() {
     navigate(`/workorders/${newOrder.ref_no}`)
   }
 
-  const handleImported = (count) => {
+  const handleImported = (record) => {
     setShowImport(false)
-    alert(`นำเข้าสำเร็จ ${count} รายการ`)
+    alert(`นำเข้าสำเร็จ — REF NO. ${record?.ref_no || ''}`)
     fetchOrders()
   }
 
@@ -511,6 +477,13 @@ export default function WorkOrdersPage() {
         {/* Pagination */}
         {totalPages > 1 && (
           <div className="flex items-center justify-center gap-3 mt-4">
+            <button
+              disabled={page <= 1}
+              onClick={() => setPage((p) => p - 1)}
+              className="text-xs px-4 py-2 border border-gray-200 rounded-lg hover:bg-gray-50 disabled:opacity-40 transition-colors"
+            >
+              ก่อนหน้า
+            </button>
             <span className="text-xs text-gray-400">หน้า {page}/{totalPages}</span>
             <button
               disabled={page >= totalPages}

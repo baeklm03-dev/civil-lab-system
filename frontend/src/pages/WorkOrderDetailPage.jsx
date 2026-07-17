@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { workorderAPI, personnelAPI, reportAPI, resultsAPI } from '../services/api'
 import { useToast } from '../hooks/useToast'
+import Loader from '../components/ui/Loader'
 import logo from '../logo.png'
 
 const STATUSES = ['รับเรื่อง', 'รอข้อมูล', 'ดำเนินการ', 'เสร็จสิ้น']
@@ -689,11 +690,7 @@ export default function WorkOrderDetailPage() {
     }
   }
 
-  if (loading) return (
-    <div className="flex items-center justify-center h-full min-h-96">
-      <i className="ti ti-loader-2 animate-spin text-orange-400 text-2xl" />
-    </div>
-  )
+  if (loading) return <Loader />
 
   if (notFound) return (
     <div className="flex flex-col items-center justify-center h-full min-h-96 gap-3">
@@ -829,6 +826,35 @@ export default function WorkOrderDetailPage() {
 
                 </div>
               )}
+            </Section>
+          )}
+
+          {/* ข้อมูลที่นำเข้าจากไฟล์/ลิงก์ (ประเภทการทดสอบ "อื่นๆ") */}
+          {order.imported_headers && order.imported_headers.length > 0 && (
+            <Section title="ข้อมูลที่นำเข้า">
+              {order.import_source && (
+                <p className="text-xs text-gray-400 -mt-2">จาก: {order.import_source}</p>
+              )}
+              <div className="overflow-x-auto border border-gray-100 rounded-lg">
+                <table className="text-xs border-collapse w-full">
+                  <thead>
+                    <tr className="bg-gray-50">
+                      {order.imported_headers.map((h, i) => (
+                        <th key={i} className="border border-gray-200 px-2 py-1.5 text-left font-medium text-gray-600 whitespace-nowrap">{h || '—'}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(order.imported_rows || []).map((row, ri) => (
+                      <tr key={ri} className={ri % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
+                        {order.imported_headers.map((_, ci) => (
+                          <td key={ci} className="border border-gray-200 px-2 py-1.5 whitespace-nowrap">{row[ci] || ''}</td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </Section>
           )}
 

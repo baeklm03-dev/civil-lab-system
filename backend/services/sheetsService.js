@@ -64,6 +64,28 @@ async function getSheetsOAuth() {
   return google.sheets({ version: 'v4', auth: oauth2Client });
 }
 
+// อ่านข้อมูลทั้งหมดของแท็บแรกใน Sheet ภายนอก (ของลูกค้า) ผ่านบัญชี OAuth ที่เชื่อมต่อไว้
+// (ลูกค้าแค่แชร์สิทธิ์ให้บัญชี Google ที่เชื่อมต่อระบบนี้ ไม่ต้องรู้จัก service account email)
+async function readFirstTabValues(spreadsheetId) {
+  const sheets = await getSheetsOAuth();
+  const meta = await sheets.spreadsheets.get({
+    spreadsheetId,
+    fields: 'properties.title,sheets.properties.title',
+  });
+  const firstTabTitle = meta.data.sheets?.[0]?.properties?.title;
+  if (!firstTabTitle) throw new Error('ไม่พบแท็บข้อมูลใน Sheet นี้');
+
+  const res = await sheets.spreadsheets.values.get({
+    spreadsheetId,
+    range: `'${firstTabTitle}'`,
+  });
+
+  return {
+    title: meta.data.properties?.title || firstTabTitle,
+    values: res.data.values || [],
+  };
+}
+
 async function readWorkOrderSheet(spreadsheetId) {
   const sheets = await getSheetsOAuth();
   const q = "'No 01'";
@@ -78,6 +100,7 @@ async function readWorkOrderSheet(spreadsheetId) {
       `${q}!G4`,  `${q}!G5`,  `${q}!G6`,   // 8-10: professor, received_date, received_by
       `${q}!C33:C42`, `${q}!D33:D42`,      // 11-12: bar_size, manufacturer
       `${q}!G33:G42`, `${q}!K33:K42`,      // 13-14: quantity, notes
+      `${q}!G2`,                            // 15: order_number (เลขที่สั่งจ้าง)
     ],
   });
 
@@ -119,6 +142,7 @@ async function readWorkOrderSheet(spreadsheetId) {
     received_date:   cell(9),
     received_by:     cell(10),
     test_items,
+    order_number:    cell(15),
   };
 }
 
@@ -399,6 +423,8 @@ module.exports = {
   buildWorkOrderSheet,
   readWorkOrderSheet,
   getSheets,
+  getSheetsOAuth,
+  readFirstTabValues,
   ensureSheetTab,
   deleteSheetRow,
   calcTotalPrice,

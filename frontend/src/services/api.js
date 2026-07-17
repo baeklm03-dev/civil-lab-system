@@ -41,7 +41,8 @@ export const workorderAPI = {
   updateStatus: (refNo, status) => api.patch(`/workorders/${refNo}/status`, { status }),
   createSheet: (refNo, extra) => api.post(`/workorders/${refNo}/create-sheet`, extra || {}),
   syncSheet: (refNo) => api.post(`/workorders/${refNo}/sync-sheet`),
-  importOrders: (workOrders) => api.post('/workorders/import', { workOrders }),
+  importFile: (formData) => api.post('/workorders/import-file', formData, { headers: { 'Content-Type': 'multipart/form-data' } }),
+  importSheetLink: (payload) => api.post('/workorders/import-sheet-link', payload),
   getFinanceSummary: (refNo) => api.get(`/workorders/${refNo}/finance-summary`),
   updateCustomColumns: (refNo, custom_columns, custom_header_fields) =>
     api.patch(`/workorders/${refNo}/custom-columns`, { custom_columns, custom_header_fields }),

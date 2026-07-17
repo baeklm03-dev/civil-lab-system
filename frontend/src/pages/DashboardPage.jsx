@@ -8,6 +8,7 @@ import DatePicker from 'react-datepicker'
 import 'react-datepicker/dist/react-datepicker.css'
 import { workorderAPI, exportAPI } from '../services/api'
 import { useToast } from '../hooks/useToast'
+import Loader from '../components/ui/Loader'
 
 const fmt = (d) => d.toISOString().slice(0, 10)
 const RANGE_PRESETS = [
@@ -156,14 +157,7 @@ export default function DashboardPage() {
   const timeStr = now.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center h-full min-h-96">
-        <div className="flex items-center gap-3 text-gray-400">
-          <i className="ti ti-loader-2 text-xl animate-spin" />
-          <span className="text-sm">กำลังโหลดข้อมูล...</span>
-        </div>
-      </div>
-    )
+    return <Loader label="กำลังโหลดข้อมูล..." />
   }
 
   const byStatusEntries = stats ? Object.entries(stats.byStatus) : []

@@ -71,7 +71,7 @@ export default function AdminLogsPage() {
         <h1 className="text-base font-medium text-gray-800">ประวัติการใช้งาน</h1>
         <button onClick={handleExport}
           className="flex items-center gap-1.5 text-sm px-3.5 py-2 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
-          <i className="ti ti-download text-sm" /> ⬇ Export CSV
+          <i className="ti ti-download text-sm" /> นำออก
         </button>
       </div>
 

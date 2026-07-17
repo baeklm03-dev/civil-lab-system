@@ -12,6 +12,7 @@ const settingsItems = [
   { to: '/admin/users',         icon: 'ti-user-cog',   label: 'จัดการผู้ใช้งาน',   roles: ['superadmin'] },
   { to: '/admin/logs',          icon: 'ti-history',     label: 'ประวัติการใช้งาน',  roles: ['superadmin'] },
   { to: '/admin/announcements', icon: 'ti-speakerphone', label: 'จัดการข้อความแจ้ง', roles: ['admin', 'superadmin'] },
+  { to: '/admin/workorder-templates', icon: 'ti-tools', label: 'จัดการใบงาน', roles: ['admin', 'superadmin'] },
 ]
 
 export default function Sidebar() {

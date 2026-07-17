@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { workorderAPI, resultsAPI, personnelAPI, reportAPI } from '../services/api'
 import { useToast } from '../hooks/useToast'
+import Loader from '../components/ui/Loader'
 import { nominalAreaFromSize, stressMPa, mpaToKsc, compressionAreaVolume, densityGcm3, fmt } from '../utils/testCalc'
 
 const TABS = [
@@ -406,7 +407,7 @@ export default function RecordResultsPage() {
   }
 
   if (loading) {
-    return <div className="flex items-center justify-center h-full min-h-96"><i className="ti ti-loader-2 animate-spin text-orange-400 text-2xl" /></div>
+    return <Loader />
   }
   if (!order) {
     return (

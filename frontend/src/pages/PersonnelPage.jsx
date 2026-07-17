@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { personnelAPI } from '../services/api'
+import Loader from '../components/ui/Loader'
 
 const ROLES = [
   { value: 'tester', label: 'ผู้ทดสอบ' },
@@ -253,9 +254,7 @@ export default function PersonnelPage() {
 
           {/* Table */}
           {loading ? (
-            <div className="flex items-center justify-center py-16">
-              <i className="ti ti-loader-2 animate-spin text-orange-400 text-xl" />
-            </div>
+            <Loader />
           ) : (
             <PersonnelTable list={filtered} onEdit={handleEdit} onToggle={handleToggle} />
           )}
