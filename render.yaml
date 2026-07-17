@@ -1,0 +1,49 @@
+services:
+  - type: web
+    name: civil-lab-backend
+    runtime: node
+    rootDir: backend
+    buildCommand: npm install
+    startCommand: npm start
+    plan: free
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 5000
+      - key: JWT_SECRET
+        sync: false
+      - key: JWT_EXPIRES_IN
+        value: 8h
+      - key: LOCAL_ADMIN_USERNAME
+        sync: false
+      - key: LOCAL_ADMIN_NAME
+        sync: false
+      - key: LOCAL_ADMIN_ROLE
+        sync: false
+      - key: LOCAL_ADMIN_PASSWORD_HASH
+        sync: false
+      - key: GOOGLE_SERVICE_ACCOUNT_EMAIL
+        sync: false
+      - key: GOOGLE_PRIVATE_KEY
+        sync: false
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false
+      - key: GOOGLE_REDIRECT_URI
+        sync: false
+      - key: DRIVE_FOLDER_ID
+        sync: false
+      - key: OWNER_EMAIL
+        sync: false
+      - key: SPREADSHEET_ID
+        sync: false
+      - key: WORKORDERS_SHEET_ID
+        sync: false
+      - key: USERS_SHEET_ID
+        sync: false
+      - key: PERSONNEL_SHEET_ID
+        sync: false
+      - key: FRONTEND_URL
+        sync: false

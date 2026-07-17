@@ -3,7 +3,7 @@ const { google } = require('googleapis');
 const { saveToken, hasToken } = require('../services/tokenStore');
 
 const router = express.Router();
-const REDIRECT_URI = 'http://localhost:5000/api/google-auth/callback';
+const REDIRECT_URI = process.env.GOOGLE_REDIRECT_URI || 'http://localhost:5000/api/google-auth/callback';
 
 function getOAuth2Client() {
   return new google.auth.OAuth2(
