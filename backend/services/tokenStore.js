@@ -17,6 +17,8 @@ function saveToken(tokens) {
   if (!merged.refresh_token && existing.refresh_token) {
     merged.refresh_token = existing.refresh_token;
   }
+  const dir = path.dirname(TOKEN_FILE);
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(TOKEN_FILE, JSON.stringify(merged, null, 2));
 }
 
