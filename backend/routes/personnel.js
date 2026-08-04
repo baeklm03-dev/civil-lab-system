@@ -1,11 +1,19 @@
 const express = require('express');
+const { body } = require('express-validator');
 const { readSheet, appendSheet, updateSheet, rowsToObjects, deleteSheetRow } = require('../services/sheetsService');
 const localPersonnel = require('../services/localPersonnel');
 const { authMiddleware, requireRole } = require('../middleware/auth');
+const { handleValidationErrors } = require('../middleware/validate');
 
 const router = express.Router();
 const SHEET_RANGE = 'Personnel!A:E';
 const useSheets = () => !!process.env.PERSONNEL_SHEET_ID;
+const PERSONNEL_ROLES = ['tester', 'professor'];
+
+const personnelValidators = [
+  body('fullname_th').trim().notEmpty().withMessage('กรุณากรอกชื่อ-นามสกุล (TH) และบทบาท'),
+  body('role').isIn(PERSONNEL_ROLES).withMessage(`role ต้องเป็นหนึ่งใน: ${PERSONNEL_ROLES.join(', ')}`),
+];
 
 async function getAll() {
   if (useSheets()) {
@@ -30,12 +38,9 @@ router.get('/', authMiddleware, async (req, res) => {
 });
 
 // POST /api/personnel
-router.post('/', authMiddleware, requireRole('admin', 'superadmin'), async (req, res) => {
+router.post('/', authMiddleware, requireRole('admin', 'superadmin'), personnelValidators, handleValidationErrors, async (req, res) => {
   try {
     const { fullname_en, fullname_th, role } = req.body;
-    if (!fullname_th || !role) {
-      return res.status(400).json({ success: false, message: 'กรุณากรอกชื่อ-นามสกุล (TH) และบทบาท' });
-    }
     const id = String(Date.now());
     const record = { id, fullname_en: fullname_en || '', fullname_th, role, active: 'true' };
 
@@ -54,12 +59,9 @@ router.post('/', authMiddleware, requireRole('admin', 'superadmin'), async (req,
 });
 
 // PUT /api/personnel/:id
-router.put('/:id', authMiddleware, requireRole('admin', 'superadmin'), async (req, res) => {
+router.put('/:id', authMiddleware, requireRole('admin', 'superadmin'), personnelValidators, handleValidationErrors, async (req, res) => {
   try {
     const { fullname_en, fullname_th, role, active } = req.body;
-    if (!fullname_th || !role) {
-      return res.status(400).json({ success: false, message: 'กรุณากรอกข้อมูลให้ครบ' });
-    }
     const activeVal = active !== undefined ? String(active) : 'true';
 
     if (useSheets()) {

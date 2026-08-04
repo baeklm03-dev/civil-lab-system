@@ -1,46 +1,32 @@
 const fs = require('fs');
 const path = require('path');
-const { google } = require('googleapis');
-const tokenStore = require('./tokenStore');
 const localAnnouncements = require('./localAnnouncements');
-const { getOAuth2Client, REDIRECT_URI } = require('../routes/googleAuth');
+const {
+  sheetsClient,
+  driveClient,
+  readRange,
+  appendRows,
+  updateRange,
+  shareWithEmail,
+} = require('../lib/googleSheetsClient');
+const { withRetry } = require('../lib/googleApiRetry');
 
-let sheetsClient = null;
-
-function getAuth() {
-  return new google.auth.GoogleAuth({
-    credentials: {
-      client_email: process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL,
-      private_key: process.env.GOOGLE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
-    },
-    scopes: ['https://www.googleapis.com/auth/spreadsheets'],
-  });
-}
-
+// Auth เป็น Service Account อย่างเดียว (ไม่มี OAuth2 user flow แล้ว) — sheetsClient/driveClient
+// เป็น singleton ที่ตั้งค่าไว้ใน lib/googleSheetsClient.js ครั้งเดียวตอน boot
+// ทุก Sheet/Drive folder ที่แอปนี้แตะต้องต้องแชร์สิทธิ์ให้ GOOGLE_SERVICE_ACCOUNT_EMAIL ไว้ก่อน
 async function getSheets() {
-  if (!sheetsClient) {
-    const auth = getAuth();
-    sheetsClient = google.sheets({ version: 'v4', auth });
-  }
   return sheetsClient;
 }
 
 async function getDrive() {
-  const stored = tokenStore.getToken();
-  if (!stored?.refresh_token) {
-    throw new Error('GOOGLE_AUTH_REQUIRED');
-  }
-  const oauth2Client = getOAuth2Client();
-  oauth2Client.setCredentials(stored);
-  oauth2Client.on('tokens', (tokens) => tokenStore.saveToken(tokens));
-  return google.drive({ version: 'v3', auth: oauth2Client });
+  return driveClient;
 }
 
 // อัปโหลดไฟล์ .xlsx จริงขึ้น Drive แล้วแปลงเป็น Google Sheet ในขั้นตอนเดียว
 // (รักษาสูตร/dropdown/merge/format ของไฟล์ต้นฉบับไว้ครบ — ดีกว่าสร้างชีทเปล่าแล้วเขียนทุก cell เอง)
 async function uploadTemplateAsSheet(templatePath, fileName, folderId) {
   const drive = await getDrive();
-  const res = await drive.files.create({
+  const res = await withRetry(() => drive.files.create({
     requestBody: {
       name: fileName,
       mimeType: 'application/vnd.google-apps.spreadsheet',
@@ -51,34 +37,25 @@ async function uploadTemplateAsSheet(templatePath, fileName, folderId) {
       body: fs.createReadStream(templatePath),
     },
     fields: 'id',
-  });
+  }), { apiMethod: 'uploadTemplateAsSheet' });
   return res.data.id;
 }
 
-async function getSheetsOAuth() {
-  const stored = tokenStore.getToken();
-  if (!stored?.refresh_token) throw new Error('GOOGLE_AUTH_REQUIRED');
-  const oauth2Client = getOAuth2Client();
-  oauth2Client.setCredentials(stored);
-  oauth2Client.on('tokens', (tokens) => tokenStore.saveToken(tokens));
-  return google.sheets({ version: 'v4', auth: oauth2Client });
-}
-
-// อ่านข้อมูลทั้งหมดของแท็บแรกใน Sheet ภายนอก (ของลูกค้า) ผ่านบัญชี OAuth ที่เชื่อมต่อไว้
-// (ลูกค้าแค่แชร์สิทธิ์ให้บัญชี Google ที่เชื่อมต่อระบบนี้ ไม่ต้องรู้จัก service account email)
+// อ่านข้อมูลทั้งหมดของแท็บแรกใน Sheet ภายนอก (ของลูกค้า) ผ่าน service account
+// (ลูกค้าต้องแชร์สิทธิ์ให้ GOOGLE_SERVICE_ACCOUNT_EMAIL ก่อนถึงจะอ่านได้)
 async function readFirstTabValues(spreadsheetId) {
-  const sheets = await getSheetsOAuth();
-  const meta = await sheets.spreadsheets.get({
+  const sheets = await getSheets();
+  const meta = await withRetry(() => sheets.spreadsheets.get({
     spreadsheetId,
     fields: 'properties.title,sheets.properties.title',
-  });
+  }), { apiMethod: 'readFirstTabValues.get' });
   const firstTabTitle = meta.data.sheets?.[0]?.properties?.title;
   if (!firstTabTitle) throw new Error('ไม่พบแท็บข้อมูลใน Sheet นี้');
 
-  const res = await sheets.spreadsheets.values.get({
+  const res = await withRetry(() => sheets.spreadsheets.values.get({
     spreadsheetId,
     range: `'${firstTabTitle}'`,
-  });
+  }), { apiMethod: 'readFirstTabValues.values.get' });
 
   return {
     title: meta.data.properties?.title || firstTabTitle,
@@ -87,11 +64,11 @@ async function readFirstTabValues(spreadsheetId) {
 }
 
 async function readWorkOrderSheet(spreadsheetId) {
-  const sheets = await getSheetsOAuth();
+  const sheets = await getSheets();
   const q = "'No 01'";
 
   // Cell layout matched to the real templates (Concrete/Steel Test Form-sheet.xlsx)
-  const res = await sheets.spreadsheets.values.batchGet({
+  const res = await withRetry(() => sheets.spreadsheets.values.batchGet({
     spreadsheetId,
     ranges: [
       `${q}!D12`, `${q}!D13`, `${q}!D14`,  // 0-2: customer_name, company, phone
@@ -102,7 +79,7 @@ async function readWorkOrderSheet(spreadsheetId) {
       `${q}!G33:G42`, `${q}!K33:K42`,      // 13-14: quantity, notes
       `${q}!G2`,                            // 15: order_number (เลขที่สั่งจ้าง)
     ],
-  });
+  }), { apiMethod: 'readWorkOrderSheet.batchGet' });
 
   const vr = res.data.valueRanges;
   const cell = (i) => vr[i]?.values?.[0]?.[0] || '';
@@ -148,9 +125,7 @@ async function readWorkOrderSheet(spreadsheetId) {
 
 // อ่านข้อมูลจาก Sheet
 async function readSheet(spreadsheetId, range) {
-  const sheets = await getSheets();
-  const res = await sheets.spreadsheets.values.get({ spreadsheetId, range });
-  return res.data.values || [];
+  return readRange(spreadsheetId, range);
 }
 
 // เขียนข้อมูลต่อท้าย Sheet
@@ -159,27 +134,12 @@ async function readSheet(spreadsheetId, range) {
 // serial แล้วอ่านกลับมาไม่ตรงกับที่เขียนไป (เช่น "true" -> "TRUE") — ไม่กระทบ buildWorkOrderSheet
 // ที่เขียนสูตร/ตัวเลขราคาตรงผ่าน sheets.spreadsheets.values.* โดยตรง (ไม่ผ่าน helper นี้)
 async function appendSheet(spreadsheetId, range, values) {
-  const sheets = await getSheets();
-  const res = await sheets.spreadsheets.values.append({
-    spreadsheetId,
-    range,
-    valueInputOption: 'RAW',
-    insertDataOption: 'INSERT_ROWS',
-    requestBody: { values },
-  });
-  return res.data;
+  await appendRows(spreadsheetId, range, values);
 }
 
 // อัปเดตข้อมูลในแถวที่ระบุ
 async function updateSheet(spreadsheetId, range, values) {
-  const sheets = await getSheets();
-  const res = await sheets.spreadsheets.values.update({
-    spreadsheetId,
-    range,
-    valueInputOption: 'RAW',
-    requestBody: { values },
-  });
-  return res.data;
+  await updateRange(spreadsheetId, range, values);
 }
 
 // แปลง rows (array of arrays) → array of objects โดยใช้ row แรกเป็น header
@@ -196,20 +156,19 @@ function rowsToObjects(rows) {
 
 // สร้าง Google Sheet ใหม่จาก template และ share ด้วย service account
 async function createWorkOrderSheet(templateSheetId, title) {
-  const auth = getAuth();
-  const drive = google.drive({ version: 'v3', auth });
+  const drive = await getDrive();
 
   // Copy template sheet
-  const copied = await drive.files.copy({
+  const copied = await withRetry(() => drive.files.copy({
     fileId: templateSheetId,
     requestBody: { name: title },
-  });
+  }), { apiMethod: 'createWorkOrderSheet.copy' });
 
   // Share กับ anyone with link (optional — ปรับตามนโยบายองค์กร)
-  await drive.permissions.create({
+  await withRetry(() => drive.permissions.create({
     fileId: copied.data.id,
     requestBody: { role: 'writer', type: 'anyone' },
-  });
+  }), { apiMethod: 'createWorkOrderSheet.share' });
 
   return {
     id: copied.data.id,
@@ -237,24 +196,24 @@ const PRICE_DATA = [
 
 // สร้าง sheet tab ใหม่ถ้ายังไม่มี พร้อมกรอกแถวเริ่มต้น (header หรือ header+data)
 async function ensureSheetTab(sheets, spreadsheetId, title, initialRows) {
-  const meta = await sheets.spreadsheets.get({ spreadsheetId, fields: 'sheets.properties' });
+  const meta = await withRetry(() => sheets.spreadsheets.get({ spreadsheetId, fields: 'sheets.properties' }), { apiMethod: 'ensureSheetTab.get' });
   const exists = meta.data.sheets.some((s) => s.properties.title === title);
   if (exists) return;
 
-  await sheets.spreadsheets.batchUpdate({
+  await withRetry(() => sheets.spreadsheets.batchUpdate({
     spreadsheetId,
     requestBody: { requests: [{ addSheet: { properties: { title } } }] },
-  });
+  }), { apiMethod: 'ensureSheetTab.addSheet' });
 
   if (initialRows && initialRows.length) {
     const maxCols = Math.max(...initialRows.map((r) => r.length));
     const lastCol = String.fromCharCode(65 + maxCols - 1);
-    await sheets.spreadsheets.values.update({
+    await withRetry(() => sheets.spreadsheets.values.update({
       spreadsheetId,
       range: `'${title}'!A1:${lastCol}${initialRows.length}`,
       valueInputOption: 'USER_ENTERED',
       requestBody: { values: initialRows },
-    });
+    }), { apiMethod: 'ensureSheetTab.values.update' });
   }
 }
 
@@ -265,11 +224,11 @@ async function ensurePriceListSheet(sheets, spreadsheetId) {
 // ลบแถวหนึ่งแถวออกจาก sheet tab (sheetRowNumber = เลขแถวจริงในชีท เริ่มที่ 1)
 async function deleteSheetRow(spreadsheetId, sheetTitle, sheetRowNumber) {
   const sheets = await getSheets();
-  const meta = await sheets.spreadsheets.get({ spreadsheetId, fields: 'sheets.properties' });
+  const meta = await withRetry(() => sheets.spreadsheets.get({ spreadsheetId, fields: 'sheets.properties' }), { apiMethod: 'deleteSheetRow.get' });
   const sheetMeta = meta.data.sheets.find((s) => s.properties.title === sheetTitle);
   if (!sheetMeta) throw new Error(`ไม่พบ sheet tab "${sheetTitle}"`);
 
-  await sheets.spreadsheets.batchUpdate({
+  await withRetry(() => sheets.spreadsheets.batchUpdate({
     spreadsheetId,
     requestBody: {
       requests: [{
@@ -283,7 +242,7 @@ async function deleteSheetRow(spreadsheetId, sheetTitle, sheetRowNumber) {
         },
       }],
     },
-  });
+  }), { apiMethod: 'deleteSheetRow.batchUpdate' });
 }
 
 // คำนวณราคารวมจาก test_items (bar_size + quantity) โดยใช้ตารางราคาเดียวกับที่ใช้ใน VLOOKUP ของ buildWorkOrderSheet
@@ -333,7 +292,6 @@ const SHEET_TEMPLATES = {
 // ค่าที่เปลี่ยนต่อใบงาน — label, สูตร, dropdown, ตาราง "รายการค่าทดสอบ" มาจากไฟล์ template เองทั้งหมด
 async function buildWorkOrderSheet(workOrderData) {
   const sheets = await getSheets();
-  const drive = await getDrive();
   const wo = workOrderData;
   const fileName = `[${wo.ref_no}] Test CE-KMUTNB`;
 
@@ -346,17 +304,14 @@ async function buildWorkOrderSheet(workOrderData) {
   // 1. อัปโหลด template จริงขึ้น Drive (แปลงเป็น Google Sheet ในตัว)
   const newSpreadsheetId = await uploadTemplateAsSheet(templatePath, fileName, folderParent);
 
-  const metaRes = await sheets.spreadsheets.get({ spreadsheetId: newSpreadsheetId, fields: 'sheets.properties' });
+  const metaRes = await withRetry(() => sheets.spreadsheets.get({ spreadsheetId: newSpreadsheetId, fields: 'sheets.properties' }), { apiMethod: 'buildWorkOrderSheet.get' });
   const mainSheetMeta = metaRes.data.sheets.find((s) => s.properties.title === 'No 01') || metaRes.data.sheets[0];
   const mainSheetId = mainSheetMeta.properties.sheetId;
 
   // 2. Share with OWNER_EMAIL
   const ownerEmails = (process.env.OWNER_EMAIL || '').split(',').map((e) => e.trim()).filter(Boolean);
   for (const email of ownerEmails) {
-    await drive.permissions.create({
-      fileId: newSpreadsheetId,
-      requestBody: { role: 'writer', type: 'user', emailAddress: email },
-    });
+    await shareWithEmail(newSpreadsheetId, email, 'writer');
   }
 
   // 3. เติมค่าที่เปลี่ยนต่อใบงาน (label/สูตร/dropdown มาจาก template อยู่แล้ว)
@@ -400,13 +355,13 @@ async function buildWorkOrderSheet(workOrderData) {
     });
   }
 
-  await sheets.spreadsheets.values.batchUpdate({
+  await withRetry(() => sheets.spreadsheets.values.batchUpdate({
     spreadsheetId: newSpreadsheetId,
     requestBody: {
       valueInputOption: 'USER_ENTERED',
       data: ranges.map(([range, value]) => ({ range, values: [[value]] })),
     },
-  });
+  }), { apiMethod: 'buildWorkOrderSheet.batchUpdate' });
 
   return {
     sheetId: mainSheetId,
@@ -423,7 +378,6 @@ module.exports = {
   buildWorkOrderSheet,
   readWorkOrderSheet,
   getSheets,
-  getSheetsOAuth,
   readFirstTabValues,
   ensureSheetTab,
   deleteSheetRow,

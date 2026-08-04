@@ -2,7 +2,7 @@ const express = require('express');
 const crypto = require('crypto');
 const { readSheet, appendSheet, updateSheet, rowsToObjects, ensureSheetTab, deleteSheetRow, getSheets } = require('../services/sheetsService');
 const localResults = require('../services/localResults');
-const { authMiddleware } = require('../middleware/auth');
+const { authMiddleware, requireRole } = require('../middleware/auth');
 
 const router = express.Router();
 const SHEET_NAME = 'TestResults';
@@ -108,8 +108,8 @@ router.put('/:id', authMiddleware, async (req, res) => {
   }
 });
 
-// DELETE /api/results/:id
-router.delete('/:id', authMiddleware, async (req, res) => {
+// DELETE /api/results/:id — ลบผลทดสอบเป็นการทำลายข้อมูลถาวร กู้คืนไม่ได้ จำกัดไว้แค่ admin/superadmin
+router.delete('/:id', authMiddleware, requireRole('admin', 'superadmin'), async (req, res) => {
   try {
     if (useSheets()) {
       const rows = await readSheet(process.env.SPREADSHEET_ID, RANGE);

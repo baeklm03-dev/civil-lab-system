@@ -2,9 +2,18 @@ const express = require('express');
 const multer = require('multer');
 const ExcelJS = require('exceljs');
 const { readSheet, appendSheet, updateSheet, rowsToObjects, createWorkOrderSheet, buildWorkOrderSheet, readWorkOrderSheet, calcTotalPrice, readFirstTabValues } = require('../services/sheetsService');
+const { GooglePermissionError, GoogleNotFoundError } = require('../lib/googleApiErrors');
 const localStore = require('../services/localStore');
 const { authMiddleware } = require('../middleware/auth');
 const { logActivity } = require('../services/activityLog');
+
+// อ่าน/สร้าง Google Sheet ภายนอก (ของลูกค้า) ล้มเหลวเพราะยังไม่ได้แชร์สิทธิ์ให้ service account
+// -> ส่งอีเมลกลับไปด้วยเพื่อให้ frontend บอกผู้ใช้ว่าต้องแชร์ให้ใคร
+function googlePermissionMessage(err) {
+  if (err instanceof GoogleNotFoundError) return 'ไม่พบ Google Sheet นี้ (ลิงก์อาจไม่ถูกต้อง หรือถูกลบไปแล้ว)';
+  const email = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL || '(ยังไม่ได้ตั้งค่า GOOGLE_SERVICE_ACCOUNT_EMAIL)';
+  return `ไม่มีสิทธิ์เข้าถึง Google Sheet นี้ — กรุณาแชร์สิทธิ์ (อย่างน้อย Viewer) ให้กับอีเมล ${email} ก่อน`;
+}
 
 const router = express.Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
@@ -431,8 +440,8 @@ router.post('/import-sheet-link', authMiddleware, async (req, res) => {
 
     res.status(201).json({ success: true, message: 'นำเข้าสำเร็จ', data: record });
   } catch (err) {
-    if (err.message === 'GOOGLE_AUTH_REQUIRED') {
-      return res.status(400).json({ success: false, message: 'เชื่อมต่อ Google ก่อนถึงจะอ่านลิงก์ Sheet ได้ (ตั้งค่า > เชื่อมต่อ Google Drive)' });
+    if (err instanceof GooglePermissionError || err instanceof GoogleNotFoundError) {
+      return res.status(err instanceof GoogleNotFoundError ? 404 : 403).json({ success: false, message: googlePermissionMessage(err) });
     }
     console.error('Import sheet link error:', err);
     res.status(500).json({ success: false, message: 'เกิดข้อผิดพลาดในการนำเข้าจากลิงก์: ' + err.message });
@@ -585,8 +594,8 @@ router.post('/:refNo/sync-sheet', authMiddleware, async (req, res) => {
 
     res.json({ success: true, message: 'ซิงค์ข้อมูลสำเร็จ', data: { ...order, ...updateFields } });
   } catch (err) {
-    if (err.message === 'GOOGLE_AUTH_REQUIRED') {
-      return res.status(403).json({ success: false, message: 'GOOGLE_AUTH_REQUIRED' });
+    if (err instanceof GooglePermissionError || err instanceof GoogleNotFoundError) {
+      return res.status(err instanceof GoogleNotFoundError ? 404 : 403).json({ success: false, message: googlePermissionMessage(err) });
     }
     console.error('Sync-sheet error:', err);
     res.status(500).json({ success: false, message: 'เกิดข้อผิดพลาด: ' + err.message });
@@ -630,8 +639,8 @@ router.post('/:refNo/create-sheet', authMiddleware, async (req, res) => {
     res.json({ success: true, sheet_url, message: 'สร้าง Google Sheet สำเร็จ' });
   } catch (err) {
     console.error('Create-sheet error:', err);
-    if (err.message === 'GOOGLE_AUTH_REQUIRED') {
-      return res.status(403).json({ success: false, message: 'GOOGLE_AUTH_REQUIRED' });
+    if (err instanceof GooglePermissionError || err instanceof GoogleNotFoundError) {
+      return res.status(err instanceof GoogleNotFoundError ? 404 : 403).json({ success: false, message: googlePermissionMessage(err) });
     }
     res.status(500).json({ success: false, message: 'เกิดข้อผิดพลาด: ' + err.message });
   }

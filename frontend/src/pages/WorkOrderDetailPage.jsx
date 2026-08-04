@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import api, { workorderAPI, personnelAPI, reportAPI, resultsAPI } from '../services/api'
+import { workorderAPI, personnelAPI, reportAPI, resultsAPI } from '../services/api'
 import { useToast } from '../hooks/useToast'
 import Loader from '../components/ui/Loader'
 import logo from '../logo.png'
@@ -657,11 +657,6 @@ export default function WorkOrderDetailPage() {
     finally { setSavingStatus(false) }
   }
 
-  const openGoogleAuthPopup = () => {
-    const apiBase = api.defaults.baseURL.replace(/\/api\/?$/, '')
-    window.open(`${apiBase}/api/google-auth/connect`, '_blank', 'width=500,height=600')
-  }
-
   const handleSyncSheet = async () => {
     setSyncingSheet(true)
     try {
@@ -669,11 +664,7 @@ export default function WorkOrderDetailPage() {
       setOrder((o) => ({ ...o, ...data.data }))
       alert('ซิงค์ข้อมูลสำเร็จ')
     } catch (err) {
-      if (err.response?.data?.message === 'GOOGLE_AUTH_REQUIRED') {
-        openGoogleAuthPopup()
-      } else {
-        alert(err.response?.data?.message || 'เกิดข้อผิดพลาดในการซิงค์')
-      }
+      alert(err.response?.data?.message || 'เกิดข้อผิดพลาดในการซิงค์')
     } finally {
       setSyncingSheet(false)
     }
@@ -685,11 +676,7 @@ export default function WorkOrderDetailPage() {
       const { data } = await workorderAPI.createSheet(refNo)
       setOrder((o) => ({ ...o, sheet_url: data.sheet_url }))
     } catch (err) {
-      if (err.response?.data?.message === 'GOOGLE_AUTH_REQUIRED') {
-        openGoogleAuthPopup()
-      } else {
-        alert(err.response?.data?.message || 'เกิดข้อผิดพลาดในการสร้าง Sheet')
-      }
+      alert(err.response?.data?.message || 'เกิดข้อผิดพลาดในการสร้าง Sheet')
     } finally {
       setCreatingSheet(false)
     }

@@ -1,15 +1,32 @@
 const express = require('express');
 const bcrypt = require('bcryptjs');
 const crypto = require('crypto');
+const { body } = require('express-validator');
 const { readSheet, appendSheet, updateSheet, rowsToObjects, ensureSheetTab, deleteSheetRow, getSheets } = require('../services/sheetsService');
 const localUsers = require('../services/localUsers');
 const { authMiddleware, requireRole } = require('../middleware/auth');
+const { handleValidationErrors } = require('../middleware/validate');
 const { logActivity } = require('../services/activityLog');
 
 const router = express.Router();
 const SHEET_NAME = 'Users';
 const HEADER = ['userId', 'username', 'passwordHash', 'fullName', 'role', 'status', 'createdAt', 'lastLogin'];
 const RANGE = `${SHEET_NAME}!A:H`;
+const USER_ROLES = ['superadmin', 'admin', 'user'];
+
+const createUserValidators = [
+  body('username').trim().notEmpty().withMessage('กรุณากรอก username'),
+  body('password').isLength({ min: 6 }).withMessage('รหัสผ่านต้องมีอย่างน้อย 6 ตัวอักษร'),
+  body('fullName').trim().notEmpty().withMessage('กรุณากรอกชื่อ-นามสกุล'),
+  body('role').isIn(USER_ROLES).withMessage(`role ต้องเป็นหนึ่งใน: ${USER_ROLES.join(', ')}`),
+];
+const updateUserValidators = [
+  body('role').optional().isIn(USER_ROLES).withMessage(`role ต้องเป็นหนึ่งใน: ${USER_ROLES.join(', ')}`),
+  body('status').optional().isIn(['active', 'inactive']).withMessage('status ต้องเป็น active หรือ inactive'),
+];
+const resetPasswordValidators = [
+  body('newPassword').isLength({ min: 6 }).withMessage('รหัสผ่านต้องมีอย่างน้อย 6 ตัวอักษร'),
+];
 
 const useSheets = () => !!process.env.USERS_SHEET_ID;
 
@@ -44,12 +61,9 @@ router.get('/', authMiddleware, requireRole('superadmin'), async (req, res) => {
 });
 
 // ── POST /api/admin/users ──────────────────────────────────
-router.post('/', authMiddleware, requireRole('superadmin'), async (req, res) => {
+router.post('/', authMiddleware, requireRole('superadmin'), createUserValidators, handleValidationErrors, async (req, res) => {
   try {
     const { username, password, fullName, role, status } = req.body;
-    if (!username || !password || !fullName || !role) {
-      return res.status(400).json({ success: false, message: 'กรุณากรอกข้อมูลให้ครบ' });
-    }
 
     const passwordHash = await bcrypt.hash(password, 10);
     const now = new Date().toISOString();
@@ -80,7 +94,7 @@ router.post('/', authMiddleware, requireRole('superadmin'), async (req, res) => 
 });
 
 // ── PUT /api/admin/users/:id ────────────────────────────────
-router.put('/:id', authMiddleware, requireRole('superadmin'), async (req, res) => {
+router.put('/:id', authMiddleware, requireRole('superadmin'), updateUserValidators, handleValidationErrors, async (req, res) => {
   try {
     const { fullName, role, status } = req.body;
     const fields = {};
@@ -164,12 +178,9 @@ router.delete('/:id', authMiddleware, requireRole('superadmin'), async (req, res
 });
 
 // ── POST /api/admin/users/:id/reset-password ───────────────
-router.post('/:id/reset-password', authMiddleware, requireRole('superadmin'), async (req, res) => {
+router.post('/:id/reset-password', authMiddleware, requireRole('superadmin'), resetPasswordValidators, handleValidationErrors, async (req, res) => {
   try {
     const { newPassword } = req.body;
-    if (!newPassword) {
-      return res.status(400).json({ success: false, message: 'กรุณาระบุรหัสผ่านใหม่' });
-    }
     const passwordHash = await bcrypt.hash(newPassword, 10);
 
     if (useSheets()) {

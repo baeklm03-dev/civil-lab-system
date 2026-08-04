@@ -95,7 +95,6 @@
 | Admin Logs | `GET /`, `GET /export` |
 | Reports | `POST /generate` (PDF จาก template จริง), `POST /export-html` (PDF จาก HTML ดิบ) |
 | Export | `GET /dashboard`, `GET /` |
-| Google Auth | `GET /status`, `GET /connect`, `GET /callback` |
 
 ## การตั้งค่า (.env)
 
@@ -104,13 +103,16 @@
 | `PORT`, `NODE_ENV`, `FRONTEND_URL` | ตั้งค่าเซิร์ฟเวอร์ทั่วไป |
 | `JWT_SECRET`, `JWT_EXPIRES_IN` | เข้ารหัส token |
 | `LOCAL_ADMIN_*` | บัญชี admin สำรอง (โหมด local, ไม่ผ่าน Sheet) |
-| `GOOGLE_SERVICE_ACCOUNT_EMAIL`, `GOOGLE_PRIVATE_KEY` | เข้าถึง Google Sheets แบบ service account (อ่าน/เขียนข้อมูลในแอป) |
-| `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | OAuth สำหรับอัปโหลดไฟล์ขึ้น Google Drive (ต้องกดเชื่อมต่อผ่าน `/api/google-auth/connect`) |
+| `GOOGLE_SERVICE_ACCOUNT_EMAIL`, `GOOGLE_PRIVATE_KEY`, `GOOGLE_PROJECT_ID` | เข้าถึง Google Sheets/Drive แบบ service account เท่านั้น (ไม่มี OAuth user flow แล้ว) — ต้องแชร์สิทธิ์ Sheet/Drive folder ที่เกี่ยวข้องทุกอันให้อีเมลนี้ก่อนใช้งาน |
 | `DRIVE_FOLDER_ID` | โฟลเดอร์ปลายทางที่จะสร้าง Sheet ใบรับงาน |
 | `OWNER_EMAIL` | อีเมลที่จะแชร์สิทธิ์แก้ไข Sheet ที่สร้างใหม่ให้อัตโนมัติ |
 | `SPREADSHEET_ID`, `WORKORDERS_SHEET_ID`, `USERS_SHEET_ID`, `PERSONNEL_SHEET_ID` | ถ้าตั้งค่า จะสลับโมดูลนั้นไปใช้ Google Sheets แทนไฟล์ JSON ในเครื่อง |
 
 ## จุดที่ยังไม่ได้ทำ / ตั้งใจพักไว้
 
-- **สิทธิ์ตาม role สำหรับใบงาน/ผลทดสอบ** — endpoint สร้าง/แก้ไขใบงานและผลทดสอบยังไม่บังคับ role (เช็คแค่ล็อกอิน) ต่างจากบุคลากร/ผู้ใช้งานที่ล็อก role ไว้แล้ว
 - ตารางรายการต่อแถวของคอนกรีต (วันที่หล่อ/ชนิดตัวอย่าง/กำลังคาดหวัง) ใน Google Sheet ปล่อยว่างให้ลูกค้ากรอกเอง ยังไม่มี field คู่กันในระบบ
+
+## สิทธิ์ตาม role
+
+สร้าง/แก้ไขใบงานและบันทึกผลทดสอบเปิดให้ทุก role ที่ล็อกอินแล้ว (เป็นงานหลักประจำวันของ staff) — ยกเว้น
+**ลบผลทดสอบ** (`DELETE /api/results/:id`) ที่จำกัดไว้แค่ `admin`/`superadmin` เพราะเป็นการทำลายข้อมูลถาวร กู้คืนไม่ได้

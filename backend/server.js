@@ -1,6 +1,8 @@
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
+const helmet = require('helmet');
+const { rateLimit } = require('express-rate-limit');
 
 const { authMiddleware } = require('./middleware/auth');
 const authRoutes = require('./routes/auth');
@@ -12,12 +14,17 @@ const resultsRoutes = require('./routes/results');
 const adminUsersRoutes = require('./routes/adminUsers');
 const adminLogsRoutes = require('./routes/adminLogs');
 const announcementsRoutes = require('./routes/announcements');
-const { router: googleAuthRoutes } = require('./routes/googleAuth');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
 
 // Middleware
+// crossOriginResourcePolicy ต้องเป็น cross-origin เพราะ frontend อยู่คนละ origin เสมอ
+// (localhost:5173 -> :5000 ตอน dev, Vercel -> Render ตอน prod) ค่า default ของ helmet
+// (same-origin) จะโดนเบราว์เซอร์บล็อก fetch ทั้งที่ CORS header ถูกต้องแล้วก็ตาม
+app.use(helmet({
+  crossOriginResourcePolicy: { policy: 'cross-origin' },
+}));
 app.use(cors({
   origin: process.env.FRONTEND_URL || 'http://localhost:5173',
   credentials: true,
@@ -25,13 +32,30 @@ app.use(cors({
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Request logger (development)
-if (process.env.NODE_ENV !== 'production') {
-  app.use((req, _res, next) => {
-    console.log(`[${new Date().toLocaleTimeString('th-TH')}] ${req.method} ${req.path}`);
-    next();
+// Rate limit ทุก /api/* route กันการยิงถล่ม — endpoint ที่ไวกว่านี้ (เช่น login) มี limiter เข้มกว่านี้ซ้อนอยู่อีกชั้น
+app.use('/api', rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 300,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { success: false, message: 'มีการเรียกใช้งานถี่เกินไป กรุณาลองใหม่อีกครั้งภายหลัง' },
+}));
+
+// Request logger — always on (not just dev) so Render's log viewer has something to grep
+// in production. Human-readable locally; structured JSON in production since a raw stdout
+// stream with no log UI is only searchable as text.
+app.use((req, res, next) => {
+  const start = Date.now();
+  res.on('finish', () => {
+    const durationMs = Date.now() - start;
+    if (process.env.NODE_ENV === 'production') {
+      console.log(JSON.stringify({ method: req.method, path: req.path, status: res.statusCode, durationMs, ts: new Date().toISOString() }));
+    } else {
+      console.log(`[${new Date().toLocaleTimeString('th-TH')}] ${req.method} ${req.path} ${res.statusCode} ${durationMs}ms`);
+    }
   });
-}
+  next();
+});
 
 // Routes
 app.use('/api/auth', authRoutes);
@@ -43,7 +67,6 @@ app.use('/api/results', resultsRoutes);
 app.use('/api/admin/users', adminUsersRoutes);
 app.use('/api/admin/logs', adminLogsRoutes);
 app.use('/api/announcements', announcementsRoutes);
-app.use('/api/google-auth', googleAuthRoutes);
 
 // Health check
 app.get('/api/health', (_req, res) => {
@@ -67,9 +90,12 @@ app.use((_req, res) => {
   res.status(404).json({ success: false, message: 'ไม่พบ endpoint นี้' });
 });
 
-// Global error handler
-app.use((err, _req, res, _next) => {
-  console.error('Unhandled error:', err);
+// Global error handler — logged as structured JSON so it's greppable in Render's log viewer
+app.use((err, req, res, _next) => {
+  console.error(JSON.stringify({
+    level: 'error', method: req.method, path: req.path,
+    message: err.message, stack: err.stack, ts: new Date().toISOString(),
+  }));
   res.status(500).json({ success: false, message: 'เกิดข้อผิดพลาดในระบบ' });
 });
 

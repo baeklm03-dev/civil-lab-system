@@ -1,21 +1,37 @@
 const express = require('express');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+const { body } = require('express-validator');
+const { rateLimit } = require('express-rate-limit');
 const { readSheet, rowsToObjects } = require('../services/sheetsService');
 const localUsers = require('../services/localUsers');
 const { authMiddleware } = require('../middleware/auth');
+const { handleValidationErrors } = require('../middleware/validate');
 const { logActivity } = require('../services/activityLog');
 
 const router = express.Router();
 
+// เข้มกว่า limiter ทั่วไปของ /api มาก — จำกัดตาม IP เพื่อกัน brute-force รหัสผ่าน
+// นับเฉพาะ request ที่ login ไม่สำเร็จ (skipSuccessfulRequests) คนที่ login ถูกต้องจะไม่โดนนับ
+const loginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  skipSuccessfulRequests: true,
+  message: { success: false, message: 'พยายามเข้าสู่ระบบผิดบ่อยเกินไป กรุณาลองใหม่ภายหลัง' },
+});
+
+const LOGIN_ERROR = 'กรุณากรอก username และ password';
+const loginValidators = [
+  body('username').trim().notEmpty().withMessage(LOGIN_ERROR),
+  body('password').notEmpty().withMessage(LOGIN_ERROR),
+];
+
 // POST /api/auth/login
-router.post('/login', async (req, res) => {
+router.post('/login', loginLimiter, loginValidators, handleValidationErrors, async (req, res) => {
   try {
     const { username, password } = req.body;
-
-    if (!username || !password) {
-      return res.status(400).json({ success: false, message: 'กรุณากรอก username และ password' });
-    }
 
     let user = null;
 
