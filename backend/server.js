@@ -99,8 +99,40 @@ app.use((err, req, res, _next) => {
   res.status(500).json({ success: false, message: 'เกิดข้อผิดพลาดในระบบ' });
 });
 
+// Local JSON fallback (backend/data/*.json) lives on disk next to the process — fine for a
+// persistent host, but wiped on every restart/redeploy on an ephemeral filesystem (e.g. Render
+// free tier). Report which mode each module is actually in at boot so a misconfigured
+// production env var (Sheet ID set locally but never copied to the host dashboard) shows up
+// immediately in the log viewer instead of silently losing data on the next restart.
+function reportStorageMode() {
+  const modules = [
+    ['WorkOrders', 'WORKORDERS_SHEET_ID'],
+    ['Users', 'USERS_SHEET_ID'],
+    ['Personnel', 'PERSONNEL_SHEET_ID'],
+    ['Results / Announcements / ActivityLog', 'SPREADSHEET_ID'],
+  ];
+  const usingLocalFile = modules.filter(([, envVar]) => !process.env[envVar]);
+
+  console.log('   Storage mode:');
+  for (const [name, envVar] of modules) {
+    const onSheets = !!process.env[envVar];
+    console.log(`     - ${name}: ${onSheets ? `Google Sheets (${envVar})` : 'local JSON file (backend/data/)'}`);
+  }
+
+  if (process.env.NODE_ENV === 'production' && usingLocalFile.length) {
+    console.warn(
+      `\n   ⚠️  WARNING: running in production with ${usingLocalFile.length} module(s) on local JSON storage.\n` +
+      '      If this host has an ephemeral filesystem (e.g. Render free tier), that data will be\n' +
+      '      LOST on every restart/redeploy. Set the env var(s) above in the host dashboard to\n' +
+      '      switch those modules to Google Sheets.\n'
+    );
+  }
+}
+
 app.listen(PORT, () => {
   console.log(`\n🚀 Civil Lab Backend running on http://localhost:${PORT}`);
   console.log(`   Environment: ${process.env.NODE_ENV || 'development'}`);
-  console.log(`   Frontend URL: ${process.env.FRONTEND_URL || 'http://localhost:5173'}\n`);
+  console.log(`   Frontend URL: ${process.env.FRONTEND_URL || 'http://localhost:5173'}`);
+  reportStorageMode();
+  console.log('');
 });
